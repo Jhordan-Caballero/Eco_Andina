@@ -1,16 +1,41 @@
-# React + Vite
+# EcoAndina — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Interfaz web de la plataforma de trazabilidad de residuos industriales (React + Vite).
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- React 19, Vite, React Router
+- Tailwind CSS v4 + shadcn/ui (base Radix, preset Nova) — componentes en `src/components/ui`
+- React Hook Form + Zod (formularios y validación)
+- TanStack Query (estado del servidor) + Axios (API REST)
 
-## React Compiler
+## Ejecutar
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+npm run dev
+```
 
-## Expanding the Oxlint configuration
+Abre `http://localhost:5173`. Necesita el backend en `http://localhost:8082` (ver el README de la raíz).
+Para apuntar a otra URL, copia `.env.example` como `.env.local` y ajusta `VITE_API_URL`.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+## Estructura
+
+```
+src/
+├── components/
+│   ├── brand/      # Logo y lockup de EcoAndina
+│   ├── layout/     # Shell del panel (sidebar, barra superior) y menú de navegación
+│   └── ui/         # Componentes shadcn/ui
+├── features/
+│   ├── auth/       # Login, sesión (AuthContext), rutas protegidas y por permiso
+│   ├── dashboard/  # Panel general (datos de ejemplo por ahora)
+│   └── placeholders/
+└── lib/            # Cliente Axios (token JWT) y helpers
+```
+
+## Sesión y permisos
+
+`POST /api/auth/login` devuelve un JWT y el usuario con sus `roles` y `permisos`. El token se guarda en
+`localStorage` y Axios lo envía como `Authorization: Bearer`. El menú lateral y las rutas de cada módulo se
+filtran según `user.permisos` (ver `src/components/layout/navigation.js`).

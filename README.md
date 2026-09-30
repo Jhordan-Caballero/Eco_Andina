@@ -41,10 +41,10 @@ Desarrollo planificado en dos etapas:
 
 Arquitectura cliente-servidor con base de datos relacional y acceso diferenciado por rol de usuario.
 
-- **Backend** (raíz del repo): Java 21, Spring Boot 4.1.1, Spring Data JPA, Spring Security, Spring Validation, Spring Web MVC
+- **Backend** (raíz del repo): Java 21, Spring Boot 4.1.1, Spring Data JPA, Spring Security (JWT), Spring Validation, Spring Web MVC
 - **Base de datos**: PostgreSQL
-- **Frontend** ([`frontend/`](frontend)): React (Vite)
-- **Comunicación**: API REST
+- **Frontend** ([`frontend/`](frontend)): React 19, Vite, Tailwind CSS v4, shadcn/ui, React Router, React Hook Form + Zod, TanStack Query
+- **Comunicación**: API REST con autenticación JWT
 - **Herramientas**: GitHub (control de versiones), Postman/Bruno (pruebas de API)
 
 Diseño de datos (diagrama de clases y modelo entidad-relación, con las decisiones de
@@ -62,10 +62,18 @@ simplificación) en [`docs/`](docs).
 
 ## Cómo ejecutar el proyecto
 
+Requisitos: JDK 21, Node.js 20+ y PostgreSQL.
+
 ### 1. Base de datos
 
-Crea una base PostgreSQL local llamada `gestion_residuos` y ajusta las credenciales en
-`src/main/resources/application.properties` (`spring.datasource.*`) según tu instalación.
+Crea una base PostgreSQL local llamada `gestion_residuos` y define tus credenciales en un archivo
+`.env` en la raíz (ignorado por git). Copia `.env.example` y ajusta los valores:
+
+```bash
+cp .env.example .env
+```
+
+Las tablas se crean solas al iniciar el backend (`ddl-auto=update`).
 
 ### 2. Backend
 
@@ -73,8 +81,11 @@ Crea una base PostgreSQL local llamada `gestion_residuos` y ajusta las credencia
 ./mvnw spring-boot:run
 ```
 
-Levanta en `http://localhost:8082`. Autenticación HTTP Basic (usuario de prueba definido en
-`SecurityConfig`, en memoria — pendiente de reemplazar por el modelo real de usuarios/roles).
+Levanta en `http://localhost:8082`. Al iniciar por primera vez carga datos de demostración (roles,
+permisos y usuarios de prueba, ver más abajo). Se desactiva con `SEED_ENABLED=false`.
+
+Si no defines `JWT_SECRET` en el `.env`, se genera una clave temporal y las sesiones se pierden en
+cada reinicio (devtools reinicia la app al guardar cambios), así que en desarrollo conviene fijarla.
 
 ### 3. Frontend
 
@@ -83,6 +94,30 @@ cd frontend
 npm install
 npm run dev
 ```
+
+Abre `http://localhost:5173` e inicia sesión con una cuenta de prueba.
+
+## Autenticación, roles y permisos
+
+Inicio de sesión con usuario **o** correo y contraseña (`POST /api/auth/login`), que devuelve un JWT
+para enviar como `Authorization: Bearer <token>` (en Postman/Bruno: pestaña *Auth → Bearer Token*).
+`GET /api/auth/me` devuelve el usuario autenticado con sus roles y permisos.
+
+Un usuario puede tener varios roles y un rol varios permisos (`usuario_rol`, `rol_permiso`). Los
+permisos y roles iniciales se derivan de los casos de uso del informe y viven en `DataSeeder`.
+
+**Cuentas de prueba** (la contraseña de todas es `app.seed.default-password`, en `application.properties`):
+
+| Usuario | Rol |
+|---|---|
+| `admin` | Administrador |
+| `aquispe` | Supervisor ambiental |
+| `rhuaman` | Generador |
+| `ltorres` | Almacenero y Generador |
+| `jccori` | Transportista |
+| `mvaldivia` | Gestor autorizado |
+| `psalas` | Auditor / Gerencia |
+| `jperez` | Generador (**inactivo**, sirve para probar la denegación de acceso) |
 
 ## Equipo
 
