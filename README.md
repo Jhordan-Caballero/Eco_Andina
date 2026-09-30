@@ -47,8 +47,9 @@ Arquitectura cliente-servidor con base de datos relacional y acceso diferenciado
 - **Comunicación**: API REST con autenticación JWT
 - **Herramientas**: GitHub (control de versiones), Postman/Bruno (pruebas de API)
 
-Diseño de datos (diagrama de clases y modelo entidad-relación, con las decisiones de
-simplificación) en [`docs/`](docs).
+Diseño de datos en [`docs/`](docs): [diagrama de clases](docs/diagrama-clases.md), [modelo
+entidad-relación](docs/modelo-entidad-relacion.md) (con el estado de implementación y las decisiones de
+simplificación) y [roles y permisos](docs/roles-y-permisos.md).
 
 ## Estructura del repositorio
 
@@ -62,7 +63,8 @@ simplificación) en [`docs/`](docs).
 
 ## Cómo ejecutar el proyecto
 
-Requisitos: JDK 21, Node.js 20+ y PostgreSQL.
+Requisitos: JDK 21, Node.js 20+ y PostgreSQL. Comprueba que `java -version` muestre 21: si tu terminal usa
+otra versión, el backend no arranca; en Windows apunta `JAVA_HOME` (y el `PATH`) al JDK 21.
 
 ### 1. Base de datos
 
@@ -104,7 +106,8 @@ para enviar como `Authorization: Bearer <token>` (en Postman/Bruno: pestaña *Au
 `GET /api/auth/me` devuelve el usuario autenticado con sus roles y permisos.
 
 Un usuario puede tener varios roles y un rol varios permisos (`usuario_rol`, `rol_permiso`). Los
-permisos y roles iniciales se derivan de los casos de uso del informe y viven en `DataSeeder`.
+permisos y roles iniciales se derivan de los casos de uso del informe y viven en `DataSeeder`; la matriz
+completa está en [`docs/roles-y-permisos.md`](docs/roles-y-permisos.md).
 
 **Cuentas de prueba** (la contraseña de todas es `app.seed.default-password`, en `application.properties`):
 
