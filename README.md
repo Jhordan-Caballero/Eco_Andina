@@ -99,6 +99,31 @@ npm run dev
 
 Abre `http://localhost:5173` e inicia sesión con una cuenta de prueba.
 
+## Despliegue con Docker Compose
+
+`docker-compose.yml` levanta los tres servicios: `db` (PostgreSQL 17 con volumen), `backend` (el
+`Dockerfile` de la raíz) y `frontend` (nginx que sirve la SPA y reenvía `/api` al backend). Solo el
+frontend publica un puerto (`FRONTEND_PORT`, por defecto 8080); la base de datos y el backend quedan en
+la red interna de Docker.
+
+Variables de entorno (en Dokploy, pestaña *Environment*; en local, un `.env` junto al compose):
+
+| Variable | Obligatoria | Descripción |
+|---|---|---|
+| `DB_PASSWORD` | sí | contraseña del usuario `ecoandina` de PostgreSQL |
+| `JWT_SECRET` | sí | secreto para firmar los JWT (mínimo 32 caracteres) |
+| `SEED_DEFAULT_PASSWORD` | sí | contraseña de los usuarios de prueba; no dejes la de desarrollo, es pública |
+| `CORS_ALLOWED_ORIGINS` | no | origen público del frontend, ej. `http://75.119.141.87:8080` |
+| `FRONTEND_PORT` | no | puerto publicado del frontend (por defecto 8080) |
+| `SEED_ENABLED` | no | `false` para no crear los usuarios de prueba |
+
+Genera un valor seguro para cada secreto con `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`.
+Sirve por HTTP: para usar HTTPS pon un dominio delante (Traefik en Dokploy).
+
+```bash
+docker compose up -d --build
+```
+
 ## Autenticación, roles y permisos
 
 Inicio de sesión con usuario **o** correo y contraseña (`POST /api/auth/login`), que devuelve un JWT
