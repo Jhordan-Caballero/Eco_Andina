@@ -1,5 +1,7 @@
 package com.gestion.residuos.Eco_Andino.entity;
 
+
+
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
