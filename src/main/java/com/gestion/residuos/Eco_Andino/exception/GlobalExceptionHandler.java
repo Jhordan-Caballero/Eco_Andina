@@ -51,4 +51,9 @@ public class GlobalExceptionHandler {
     public ErrorResponse cuerpoIlegible() {
         return new ErrorResponse("El cuerpo de la petición está vacío o no es un JSON válido");
     }
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse argumentoInvalido(IllegalArgumentException ex) {
+        return new ErrorResponse(ex.getMessage());
+    }
 }
