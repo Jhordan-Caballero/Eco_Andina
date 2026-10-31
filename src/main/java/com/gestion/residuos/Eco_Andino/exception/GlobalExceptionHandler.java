@@ -1,11 +1,8 @@
 package com.gestion.residuos.Eco_Andino.exception;
 
 import com.gestion.residuos.Eco_Andino.dto.ErrorResponse;
-import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -13,14 +10,9 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -64,54 +56,4 @@ public class GlobalExceptionHandler {
     public ErrorResponse argumentoInvalido(IllegalArgumentException ex) {
         return new ErrorResponse(ex.getMessage());
     }
-
-    // ---- Casos de uso 17 a 22 ----
-
-    @ExceptionHandler(SolicitudInvalidaException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ErrorResponse solicitudInvalida(SolicitudInvalidaException ex) {
-        return new ErrorResponse(ex.getMessage());
-    }
-
-    @ExceptionHandler(RecursoNoEncontradoException.class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    public ErrorResponse noEncontrado(RecursoNoEncontradoException ex) {
-        return new ErrorResponse(ex.getMessage());
-    }
-
-    @ExceptionHandler(ConflictoException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    public ErrorResponse conflicto(ConflictoException ex) {
-        return new ErrorResponse(ex.getMessage());
-    }
-
-    // Respaldo de las restricciones de la BD (ej. dos peticiones simultáneas con el mismo código)
-    @ExceptionHandler(DataIntegrityViolationException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    public ErrorResponse integridadDatos() {
-        return new ErrorResponse("El registro entra en conflicto con datos existentes");
-    }
-
-    // Parámetro de URL con formato inválido (fecha mal escrita, estado que no existe…)
-    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ErrorResponse parametroInvalido(MethodArgumentTypeMismatchException ex) {
-        return new ErrorResponse("El valor del parámetro '" + ex.getName() + "' no es válido");
-    }
-
-    // Cubre @PreAuthorize y las validaciones de permiso de los servicios: siempre una respuesta JSON clara
-    @ExceptionHandler(AccessDeniedException.class)
-    @ResponseStatus(HttpStatus.FORBIDDEN)
-    public ErrorResponse accesoDenegado() {
-        return new ErrorResponse("No tienes permisos para realizar esta operación");
-    }
-
-    @ExceptionHandler(ExportacionException.class)
-    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public ErrorResponse errorExportacion(ExportacionException ex) {
-        // La causa técnica queda en el log; al cliente solo el mensaje
-        LoggerFactory.getLogger(GlobalExceptionHandler.class).error("Falló la exportación", ex);
-        return new ErrorResponse(ex.getMessage());
-    }
-
 }
