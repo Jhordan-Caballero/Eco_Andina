@@ -12,13 +12,14 @@ import {
 } from "@/components/ui/sheet"
 import { useAuth } from "@/features/auth/AuthContext"
 import { cn } from "@/lib/utils"
-import { NAV_ITEMS } from "./navigation"
+import { NAV_GROUPS, NAV_ITEMS } from "./navigation"
 
 function SidebarContent({ onNavigate }) {
-  const { hasPermission } = useAuth()
-  const items = NAV_ITEMS.filter(
-    (item) => !item.permission || hasPermission(item.permission)
-  )
+  const { hasAnyPermission } = useAuth()
+  const grupos = NAV_GROUPS.map((grupo) => ({
+    ...grupo,
+    items: grupo.items.filter((item) => !item.permisos || hasAnyPermission(item.permisos)),
+  })).filter((grupo) => grupo.items.length > 0)
 
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
@@ -26,31 +27,38 @@ function SidebarContent({ onNavigate }) {
         <BrandLockup inverse />
       </div>
 
-      <nav aria-label="Módulos" className="flex-1 space-y-1 px-3">
-        {items.map(({ to, end, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            onClick={onNavigate}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-                isActive
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Icon
-                  className={cn("size-[18px]", isActive && "text-sidebar-primary")}
-                />
-                {label}
-              </>
+      <nav aria-label="Módulos" className="flex-1 space-y-5 overflow-y-auto px-3 pb-2">
+        {grupos.map((grupo) => (
+          <div key={grupo.titulo ?? "inicio"} className="space-y-1">
+            {grupo.titulo && (
+              <p className="px-3 pb-1 text-[0.68rem] font-semibold tracking-[0.14em] text-sidebar-foreground/50 uppercase">
+                {grupo.titulo}
+              </p>
             )}
-          </NavLink>
+            {grupo.items.map(({ to, end, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={end}
+                onClick={onNavigate}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                    isActive
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon className={cn("size-[18px]", isActive && "text-sidebar-primary")} />
+                    {label}
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </div>
         ))}
       </nav>
 
