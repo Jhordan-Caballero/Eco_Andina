@@ -13,7 +13,8 @@ public class ResiduoService {
         StringWriter writer = new StringWriter();
 
         // Configuración y escritura con commons-csv
-        try (CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT.withHeader("ID", "Código", "Nombre", "Peligrosidad"))) {
+        try (CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT.withHeader
+                ("ID", "Código", "Nombre", "Peligrosidad"))) {
             for (Residuo residuo : residuosActivos) {
                 csvPrinter.printRecord(
                         residuo.getIdResiduo(),
