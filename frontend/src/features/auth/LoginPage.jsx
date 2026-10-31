@@ -6,6 +6,7 @@ import { z } from "zod"
 import { useMutation } from "@tanstack/react-query"
 import { Eye, EyeOff, LoaderCircle, TriangleAlert } from "lucide-react"
 import { BrandLockup } from "@/components/brand/Logo"
+import { NAV_ITEMS } from "@/components/layout/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Form,
@@ -27,7 +28,7 @@ const loginSchema = z.object({
 })
 
 export default function LoginPage() {
-  const { status, signIn } = useAuth()
+  const { status, signIn, hasAnyPermission } = useAuth()
   const location = useLocation()
   const [showPassword, setShowPassword] = useState(false)
 
@@ -40,7 +41,10 @@ export default function LoginPage() {
 
   if (status === "loading") return <FullScreenLoader />
   if (status === "authenticated") {
-    return <Navigate to={location.state?.from?.pathname ?? "/"} replace />
+    const destino = location.state?.from?.pathname ?? "/"
+    const modulo = NAV_ITEMS.find((item) => item.to === destino)
+    const permitido = !modulo?.permisos || hasAnyPermission(modulo.permisos)
+    return <Navigate to={permitido ? destino : "/"} replace />
   }
 
   return (

@@ -26,10 +26,10 @@ export function ProtectedRoute() {
   return <Outlet />
 }
 
-export function RequirePermission({ permission, children }) {
-  const { hasPermission } = useAuth()
+export function RequirePermission({ permisos, children }) {
+  const { hasAnyPermission } = useAuth()
 
-  if (!hasPermission(permission)) {
+  if (!hasAnyPermission(permisos)) {
     return (
       <div className="mx-auto flex max-w-md flex-col items-center gap-3 py-16 text-center">
         <ShieldAlert className="size-10 text-warning" />
