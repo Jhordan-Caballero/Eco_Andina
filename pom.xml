@@ -72,12 +72,6 @@
 			<artifactId>commons-text</artifactId>
 			<version>1.15.0</version>
 		</dependency>
-		<!-- ==================== Logback ==================== -->
-		<dependency>
-			<groupId>ch.qos.logback</groupId>
-			<artifactId>logback-classic</artifactId>
-			<version>1.4.14</version>
-		</dependency>
 
 		<!-- ==================== Spring Boot ==================== -->
 
