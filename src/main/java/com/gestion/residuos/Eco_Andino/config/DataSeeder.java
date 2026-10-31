@@ -33,7 +33,12 @@ public class DataSeeder implements ApplicationRunner {
     }
 
     private record UsuarioSeed(String username, String nombres, String apellidos, String email, String estado,
-                               List<String> roles) {
+                               List<String> roles, String password) {
+
+        UsuarioSeed(String username, String nombres, String apellidos, String email, String estado,
+                    List<String> roles) {
+            this(username, nombres, apellidos, email, estado, roles, null);
+        }
     }
 
     private static final List<PermisoSeed> PERMISOS = List.of(
@@ -132,7 +137,9 @@ public class DataSeeder implements ApplicationRunner {
                     Usuario.ESTADO_ACTIVO, List.of("AUDITOR_GERENCIA")),
             // Desactivado a propósito: sirve para probar la denegación de acceso
             new UsuarioSeed("jperez", "Juan", "Pérez Rojas", "juan.perez@ecoandina.pe",
-                    Usuario.ESTADO_INACTIVO, List.of("GENERADOR")));
+                    Usuario.ESTADO_INACTIVO, List.of("GENERADOR")),
+            new UsuarioSeed("test", "Usuario", "de Prueba", "test@test.com",
+                    Usuario.ESTADO_ACTIVO, ROLES.stream().map(RolSeed::codigo).toList(), "12345678"));
 
     private final PermisoRepository permisoRepository;
     private final RolRepository rolRepository;
@@ -215,7 +222,7 @@ public class DataSeeder implements ApplicationRunner {
             usuario.setApellidos(seed.apellidos());
             usuario.setEmail(seed.email());
             usuario.setEstado(seed.estado());
-            usuario.setPassword(passwordEncoder.encode(defaultPassword));
+            usuario.setPassword(passwordEncoder.encode(seed.password() != null ? seed.password() : defaultPassword));
             for (String codigoRol : seed.roles()) {
                 usuario.getRoles().add(requerido(roles, codigoRol));
             }
