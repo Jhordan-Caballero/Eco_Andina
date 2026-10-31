@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { Badge } from "@/components/ui/badge"
+import { EstadoBadge } from "@/components/shared/StatusBadge"
 import {
   Card,
   CardAction,
@@ -16,28 +16,19 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useAuth } from "@/features/auth/AuthContext"
-import { cn } from "@/lib/utils"
+import { ESTADO_RECOLECCION } from "@/lib/estados"
 
-const ESTADO_STYLES = {
-  Pendiente: "bg-secondary text-secondary-foreground",
-  Programada: "border-primary/40 bg-primary/5 text-primary",
-  "En tránsito": "bg-info/10 text-info",
-  Recibida: "bg-primary/10 text-primary",
-  Cerrada: "bg-muted text-muted-foreground",
-}
-
-export function EstadoBadge({ estado }) {
-  return <Badge className={cn(ESTADO_STYLES[estado])}>{estado}</Badge>
-}
+const PERMISOS_RECOLECCION = ["RECOLECCION_CONSULTAR", "RECOLECCION_PROGRAMAR", "TRASLADO_REGISTRAR", "RECEPCION_REGISTRAR"]
 
 export function OrdenesRecientes({ ordenes }) {
-  const { hasPermission } = useAuth()
+  const { hasAnyPermission } = useAuth()
+  const puedeVer = hasAnyPermission(PERMISOS_RECOLECCION)
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-xl">Órdenes recientes</CardTitle>
-        {hasPermission("RECOLECCION_CONSULTAR") && (
+        {puedeVer && (
           <CardAction>
             <Link
               to="/recolecciones"
@@ -62,7 +53,18 @@ export function OrdenesRecientes({ ordenes }) {
           <TableBody>
             {ordenes.map((orden) => (
               <TableRow key={orden.codigo}>
-                <TableCell className="font-medium tabular-nums">{orden.codigo}</TableCell>
+                <TableCell className="font-medium tabular-nums">
+                  {puedeVer ? (
+                    <Link
+                      to={`/recolecciones?orden=${orden.codigo}`}
+                      className="underline-offset-4 hover:underline"
+                    >
+                      {orden.codigo}
+                    </Link>
+                  ) : (
+                    orden.codigo
+                  )}
+                </TableCell>
                 <TableCell>{orden.area}</TableCell>
                 <TableCell>
                   <div>{orden.residuo}</div>
@@ -72,7 +74,7 @@ export function OrdenesRecientes({ ordenes }) {
                 </TableCell>
                 <TableCell>{orden.transportista}</TableCell>
                 <TableCell>
-                  <EstadoBadge estado={orden.estado} />
+                  <EstadoBadge mapa={ESTADO_RECOLECCION} valor={orden.estado} />
                 </TableCell>
               </TableRow>
             ))}
