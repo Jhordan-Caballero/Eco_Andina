@@ -8,6 +8,7 @@ import {
 } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
+import { registrarAcceso } from "@/features/auditoria/auditoriaApi"
 import { setUnauthorizedHandler } from "@/lib/api"
 import { session } from "@/lib/session"
 import { fetchMe, login } from "./authApi"
@@ -62,6 +63,7 @@ export function AuthProvider({ children }) {
   const signIn = useCallback(async (credentials) => {
     const data = await login(credentials)
     session.setToken(data.accessToken)
+    registrarAcceso(`${data.user.nombres} ${data.user.apellidos}`)
     setUser(data.user)
     setStatus("authenticated")
     return data.user
