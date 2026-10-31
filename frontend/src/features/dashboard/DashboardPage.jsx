@@ -2,7 +2,9 @@ import { useQuery } from "@tanstack/react-query"
 import { Info } from "lucide-react"
 import { AlertasAlmacenamiento } from "./AlertasAlmacenamiento"
 import { fetchResumen } from "./dashboardApi"
+import { useActor } from "@/hooks/useActor"
 import { KpiCard } from "./KpiCard"
+import { MisPendientes } from "./MisPendientes"
 import { OrdenesRecientes } from "./OrdenesRecientes"
 
 function Skeleton({ className }) {
@@ -26,9 +28,10 @@ function DashboardSkeleton() {
 }
 
 export default function DashboardPage() {
+  const actor = useActor()
   const { data, isPending, isError } = useQuery({
-    queryKey: ["dashboard", "resumen"],
-    queryFn: fetchResumen,
+    queryKey: ["dashboard", "resumen", actor],
+    queryFn: () => fetchResumen(actor),
   })
 
   if (isPending) return <DashboardSkeleton />
@@ -40,13 +43,13 @@ export default function DashboardPage() {
     )
   }
 
-  const { kpis, ordenesRecientes, alertas } = data
+  const { kpis, ordenesRecientes, alertas, pendientes } = data
 
   return (
     <div className="space-y-6">
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <Info className="size-3.5 shrink-0" />
-        Datos de ejemplo: el panel se conectará a la API en las siguientes etapas.
+        Datos de demostración: los módulos trabajan con datos simulados en el navegador y se reinician al recargar la página.
       </p>
 
       <section
@@ -78,9 +81,12 @@ export default function DashboardPage() {
         />
       </section>
 
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_24rem]">
         <OrdenesRecientes ordenes={ordenesRecientes} />
-        <AlertasAlmacenamiento alertas={alertas} />
+        <div className="grid items-start gap-4 lg:grid-cols-2 2xl:grid-cols-1">
+          <MisPendientes pendientes={pendientes} />
+          <AlertasAlmacenamiento alertas={alertas} />
+        </div>
       </div>
     </div>
   )
