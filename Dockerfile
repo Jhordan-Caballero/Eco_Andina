@@ -12,7 +12,9 @@ RUN ./mvnw -B -DskipTests package
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-RUN useradd --system --no-create-home --uid 10001 ecoandina
+RUN useradd --system --no-create-home --uid 10001 ecoandina \
+    && mkdir -p /app/logs \
+    && chown ecoandina /app/logs
 COPY --from=build /app/target/*.jar app.jar
 USER ecoandina
 
