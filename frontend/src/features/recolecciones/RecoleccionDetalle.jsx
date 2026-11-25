@@ -17,7 +17,6 @@ import {
 } from "@/lib/estados"
 import { cantidad, fecha, fechaHora } from "@/lib/formato"
 import { cn } from "@/lib/utils"
-import { estadoVigencia } from "@/mocks/store"
 import { AccionRecoleccion } from "./AccionesRecoleccion"
 import { accionPendiente, detalleRecoleccion } from "./recoleccionesApi"
 
@@ -170,7 +169,7 @@ export function RecoleccionDetalle({ idRecoleccion, onClose, onDialog }) {
                   "Transportista",
                   <span key="t" className="inline-flex flex-wrap items-center gap-1.5">
                     {orden.transportista?.empresa}
-                    <EstadoBadge mapa={ESTADO_VIGENCIA} valor={estadoVigencia(orden.transportista?.vigencia)} />
+                    <EstadoBadge mapa={ESTADO_VIGENCIA} valor={orden.transportista?.estadoVigencia} />
                   </span>,
                 ],
                 ["Vehículo", orden.vehiculo && `${orden.vehiculo.placa} · ${orden.vehiculo.tipo}`],
@@ -178,7 +177,7 @@ export function RecoleccionDetalle({ idRecoleccion, onClose, onDialog }) {
                   "Gestor",
                   <span key="g" className="inline-flex flex-wrap items-center gap-1.5">
                     {orden.gestor?.empresa}
-                    <EstadoBadge mapa={ESTADO_VIGENCIA} valor={estadoVigencia(orden.gestor?.vigencia)} />
+                    <EstadoBadge mapa={ESTADO_VIGENCIA} valor={orden.gestor?.estadoVigencia} />
                   </span>,
                 ],
                 ["Autorización", orden.gestor?.autorizacion],

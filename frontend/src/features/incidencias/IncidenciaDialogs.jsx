@@ -15,7 +15,7 @@ const esquemaReporte = z
     idArea: z.string().min(1, "Selecciona el área"),
     referencia: z.string().optional(),
     descripcion: z.string().trim().min(15, "Describe lo ocurrido (mínimo 15 caracteres)"),
-    evidencia: z.string().optional(),
+    evidencia: z.any().optional(),
   })
   .refine((valores) => valores.severidad !== "ALTA" || valores.evidencia, {
     path: ["evidencia"],

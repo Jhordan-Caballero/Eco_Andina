@@ -1,74 +1,68 @@
 package com.gestion.residuos.Eco_Andino.controller;
 
-import com.gestion.residuos.Eco_Andino.dto.*;
-import com.gestion.residuos.Eco_Andino.entity.EstadoIncidencia;
-import com.gestion.residuos.Eco_Andino.entity.Severidad;
-import com.gestion.residuos.Eco_Andino.entity.TipoIncidencia;
-import com.gestion.residuos.Eco_Andino.service.AreaConsultaService;
+import com.gestion.residuos.Eco_Andino.dto.IncidenciaDtos.*;
 import com.gestion.residuos.Eco_Andino.service.IncidenciaService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.time.LocalDate;
 import java.util.List;
 
-/** CU17 – Gestionar incidencias y acciones correctivas (Supervisor ambiental). */
+/** Incidencias y acciones correctivas (CU17) y observaciones operativas (CU18). */
 @RestController
-@RequestMapping("/api/incidencias")
+@RequestMapping("/api")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('INCIDENCIA_GESTIONAR')")
 public class IncidenciaController {
+    private static final String VER = "hasAnyAuthority('INCIDENCIA_GESTIONAR', 'OBSERVACION_REGISTRAR')";
+
     private final IncidenciaService incidenciaService;
-    private final AreaConsultaService areaConsultaService;
 
-    @GetMapping
-    public PaginaResponse<IncidenciaResponse> listar(
-            @RequestParam(required = false) EstadoIncidencia estado,
-            @RequestParam(required = false) Severidad severidad,
-            @RequestParam(required = false) TipoIncidencia tipo,
-            @RequestParam(required = false) Integer areaId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
-            @RequestParam(defaultValue = "0") int pagina,
-            @RequestParam(defaultValue = "20") int tamano) {
-        return incidenciaService.listar(estado, severidad, tipo, areaId, desde, hasta, pagina, tamano);
+    @GetMapping("/incidencias")
+    @PreAuthorize(VER)
+    public List<IncidenciaDto> listar() {
+        return incidenciaService.listar();
     }
 
-    // Áreas activas para el selector (ruta propia: /api/areas queda libre para el CU04)
-    @GetMapping("/areas")
-    public List<AreaResponse> areas() {
-        return areaConsultaService.listarActivas();
+    @GetMapping("/incidencias/opciones")
+    @PreAuthorize(VER)
+    public OpcionesIncidencia opciones() {
+        return incidenciaService.opciones();
     }
 
-    @GetMapping("/responsables")
-    public List<UsuarioResumen> responsables() {
-        return incidenciaService.responsablesDisponibles();
-    }
-
-    @GetMapping("/{id}")
-    public IncidenciaResponse obtener(@PathVariable Integer id) {
-        return incidenciaService.obtener(id);
-    }
-
-    @PostMapping
+    @PostMapping(value = "/incidencias", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
-    public IncidenciaResponse crear(@Valid @RequestBody IncidenciaRequest request) {
-        return incidenciaService.crear(request);
+    @PreAuthorize(VER)
+    public IncidenciaDto reportar(@Valid @RequestPart("datos") IncidenciaRequest datos,
+                                  @RequestPart(value = "evidencia", required = false) MultipartFile evidencia) {
+        return incidenciaService.reportar(datos, evidencia);
     }
 
-    @PutMapping("/{id}")
-    public IncidenciaResponse seguimiento(@PathVariable Integer id,
-                                          @Valid @RequestBody IncidenciaSeguimientoRequest request) {
-        return incidenciaService.registrarSeguimiento(id, request);
+    @PostMapping("/incidencias/{id}/seguimiento")
+    @PreAuthorize("hasAuthority('INCIDENCIA_GESTIONAR')")
+    public IncidenciaDto seguimiento(@PathVariable Integer id, @Valid @RequestBody SeguimientoRequest datos) {
+        return incidenciaService.registrarSeguimiento(id, datos);
     }
 
-    @PostMapping("/{id}/cierre")
-    public IncidenciaResponse cerrar(@PathVariable Integer id,
-                                     @Valid @RequestBody(required = false) IncidenciaCierreRequest request) {
-        return incidenciaService.cerrar(id, request);
+    @PatchMapping("/incidencias/{id}/cerrar")
+    @PreAuthorize("hasAuthority('INCIDENCIA_GESTIONAR')")
+    public IncidenciaDto cerrar(@PathVariable Integer id, @Valid @RequestBody CierreRequest datos) {
+        return incidenciaService.cerrar(id, datos.nota());
+    }
+
+    @GetMapping("/observaciones")
+    @PreAuthorize(VER)
+    public List<ObservacionDto> listarObservaciones() {
+        return incidenciaService.listarObservaciones();
+    }
+
+    @PostMapping("/observaciones")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('OBSERVACION_REGISTRAR')")
+    public ObservacionDto registrarObservacion(@Valid @RequestBody ObservacionRequest datos) {
+        return incidenciaService.registrarObservacion(datos);
     }
 }

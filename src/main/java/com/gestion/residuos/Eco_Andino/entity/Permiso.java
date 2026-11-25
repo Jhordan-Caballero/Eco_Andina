@@ -26,4 +26,8 @@ public class Permiso {
 
     @Column(length = 200)
     private String descripcion;
+
+    // Caso de uso del informe que origina el permiso (ej. CU08)
+    @Column(name = "caso_uso", length = 20)
+    private String casoUso;
 }

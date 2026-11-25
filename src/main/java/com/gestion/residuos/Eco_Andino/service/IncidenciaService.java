@@ -1,192 +1,166 @@
 package com.gestion.residuos.Eco_Andino.service;
 
-import com.gestion.residuos.Eco_Andino.dto.*;
+import com.gestion.residuos.Eco_Andino.dto.IncidenciaDtos.*;
+import com.gestion.residuos.Eco_Andino.dto.Opcion;
 import com.gestion.residuos.Eco_Andino.entity.*;
-import com.gestion.residuos.Eco_Andino.exception.ConflictoException;
 import com.gestion.residuos.Eco_Andino.exception.RecursoNoEncontradoException;
 import com.gestion.residuos.Eco_Andino.exception.SolicitudInvalidaException;
-import com.gestion.residuos.Eco_Andino.repository.AreaGeneradoraRepository;
-import com.gestion.residuos.Eco_Andino.repository.IncidenciaRepository;
-import com.gestion.residuos.Eco_Andino.repository.IncidenciaSpecs;
-import com.gestion.residuos.Eco_Andino.repository.UsuarioRepository;
+import com.gestion.residuos.Eco_Andino.repository.*;
+import com.gestion.residuos.Eco_Andino.util.Codigos;
+import com.gestion.residuos.Eco_Andino.util.Etiquetas;
 import com.gestion.residuos.Eco_Andino.util.TextoUtil;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.time.Clock;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Objects;
+import java.util.Map;
+import java.util.Set;
 
-/** CU17 – Gestionar incidencias y acciones correctivas. */
+/** Incidencias ambientales y acciones correctivas (CU17) y observaciones operativas (CU18). */
 @Service
 @RequiredArgsConstructor
 public class IncidenciaService {
-    static final int ACCION_MINIMA_CIERRE = 10;
-    private static final int TAMANO_MAXIMO = 100;
+    private static final Map<String, Integer> ORDEN_ESTADO = Map.of(
+            Incidencia.ABIERTA, 0, Incidencia.EN_SEGUIMIENTO, 1, Incidencia.CERRADA, 2);
+    private static final Set<String> SEVERIDADES = Set.of("ALTA", "MEDIA", "BAJA");
 
     private final IncidenciaRepository incidenciaRepository;
-    private final AreaGeneradoraRepository areaRepository;
-    private final UsuarioRepository usuarioRepository;
-    private final AuditoriaService auditoriaService;
-    private final Clock clock;
+    private final ObservacionRepository observacionRepository;
+    private final RecoleccionRepository recoleccionRepository;
+    private final ContenedorRepository contenedorRepository;
+    private final GeneracionRepository generacionRepository;
+    private final CatalogoService catalogos;
+    private final DocumentoService documentos;
+    private final VistaService vistas;
+    private final SesionService sesion;
+    private final AuditoriaService auditoria;
 
-    // ---------------------------------------------------------------- consulta (pasos 2 y 3)
-
+    /** Primero las abiertas, luego en seguimiento y al final las cerradas; dentro de cada grupo, las más recientes. */
     @Transactional(readOnly = true)
-    public PaginaResponse<IncidenciaResponse> listar(EstadoIncidencia estado, Severidad severidad, TipoIncidencia tipo,
-                                                     Integer areaId, LocalDate desde, LocalDate hasta,
-                                                     int pagina, int tamano) {
-        if (desde != null && hasta != null && desde.isAfter(hasta)) {
-            throw new SolicitudInvalidaException("La fecha inicial no puede ser posterior a la final");
-        }
-        var spec = IncidenciaSpecs.filtrar(estado, severidad, tipo, areaId,
-                desde == null ? null : desde.atStartOfDay(),
-                hasta == null ? null : hasta.plusDays(1).atStartOfDay());
-        var orden = Sort.by(Sort.Direction.DESC, "fecha", "idIncidencia");
-        var page = incidenciaRepository.findAll(spec,
-                PageRequest.of(Math.max(pagina, 0), Math.min(Math.max(tamano, 1), TAMANO_MAXIMO), orden));
-        return PaginaResponse.de(page, IncidenciaResponse::from);
+    public List<IncidenciaDto> listar() {
+        VistaService.Instantanea foto = vistas.instantanea();
+        return incidenciaRepository.findAll().stream()
+                .sorted(Comparator.comparing((Incidencia i) -> ORDEN_ESTADO.getOrDefault(i.getEstado(), 9))
+                        .thenComparing(Incidencia::getFecha, Comparator.reverseOrder()))
+                .map(i -> vistas.incidencia(i, foto))
+                .toList();
     }
 
     @Transactional(readOnly = true)
-    public IncidenciaResponse obtener(Integer id) {
-        return IncidenciaResponse.from(buscar(id));
+    public OpcionesIncidencia opciones() {
+        List<Opcion> referencias = new ArrayList<>();
+        recoleccionRepository.findAll(Sort.by(Sort.Direction.DESC, "idRecoleccion"))
+                .forEach(o -> referencias.add(new Opcion(o.getNumeroOrden(), o.getNumeroOrden() + " · Orden de recolección")));
+        contenedorRepository.findAll(Sort.by("codigo"))
+                .forEach(c -> referencias.add(new Opcion(c.getCodigo(), c.getCodigo() + " · Contenedor")));
+        generacionRepository.findAll(Sort.by(Sort.Direction.DESC, "idGeneracion"))
+                .forEach(g -> referencias.add(new Opcion(g.getCodigo(), g.getCodigo() + " · Registro de generación")));
+        return new OpcionesIncidencia(catalogos.listarAreasActivas(), referencias, catalogos.listarResponsables());
     }
-
-    @Transactional(readOnly = true)
-    public List<UsuarioResumen> responsablesDisponibles() {
-        return usuarioRepository.findByEstadoOrderByApellidosAscNombresAsc(Usuario.ESTADO_ACTIVO).stream()
-                .map(UsuarioResumen::from).toList();
-    }
-
-    // ---------------------------------------------------------------- registro (pasos 4 a 6)
 
     @Transactional
-    public IncidenciaResponse crear(IncidenciaRequest request) {
-        Area_Generadora area = areaActiva(request.areaId());
-        Usuario responsable = responsableActivo(request.responsableId());
-        validarFecha(request.fecha());
+    public IncidenciaDto reportar(IncidenciaRequest datos, MultipartFile evidencia) {
+        if (!Etiquetas.TIPO_INCIDENCIA.containsKey(datos.tipo())) {
+            throw new SolicitudInvalidaException("El tipo de incidencia no es válido.");
+        }
+        CatalogoService.validarValor(SEVERIDADES, datos.severidad(), "La severidad debe ser ALTA, MEDIA o BAJA.");
+        boolean conEvidencia = evidencia != null && !evidencia.isEmpty();
+        if ("ALTA".equals(datos.severidad()) && !conEvidencia) {
+            throw new SolicitudInvalidaException("Adjunta una evidencia para incidencias de severidad alta.");
+        }
 
         Incidencia incidencia = new Incidencia();
-        incidencia.setTipo(request.tipo());
-        incidencia.setDescripcion(TextoUtil.normalizar(request.descripcion()));
-        incidencia.setArea(area);
-        incidencia.setFecha(request.fecha());
-        incidencia.setSeveridad(request.severidad());
-        incidencia.setResponsable(responsable);
-        incidencia.setEstado(EstadoIncidencia.ABIERTA);
-        incidencia.setAccionCorrectiva(TextoUtil.normalizar(request.accionCorrectiva()));
-        Incidencia guardada = incidenciaRepository.save(incidencia);
+        incidencia.setTipo(datos.tipo());
+        incidencia.setDescripcion(datos.descripcion().trim());
+        incidencia.setArea(catalogos.buscarArea(datos.idArea()));
+        incidencia.setReferencia(TextoUtil.normalizarCodigo(datos.referencia()));
+        incidencia.setSeveridad(datos.severidad());
+        incidencia.setEstado(Incidencia.ABIERTA);
+        incidencia.setFecha(sesion.ahora());
+        incidencia.setReportadoPor(sesion.usuario());
+        incidenciaRepository.save(incidencia);
+        incidencia.setCodigo(Codigos.incidencia(incidencia.getIdIncidencia()));
 
-        auditoriaService.registrar(AccionAuditoria.CREAR, "INCIDENCIA", guardada.getIdIncidencia(),
-                "%s, gravedad %s, área %s, responsable %s".formatted(guardada.getTipo(), guardada.getSeveridad(),
-                        area.getNombre(), responsable.getUsername()));
-        return IncidenciaResponse.from(guardada);
+        if (conEvidencia) {
+            documentos.registrar("EVIDENCIA_FOTO", incidencia.getCodigo(), "Evidencia de la incidencia", evidencia, null);
+        }
+        auditoria.registrar("CREAR", "Incidencia", incidencia.getCodigo(),
+                "Reportó: " + Etiquetas.de(Etiquetas.TIPO_INCIDENCIA, incidencia.getTipo()).toLowerCase());
+        return vistas.incidencia(incidencia, vistas.instantanea());
     }
-
-    // ---------------------------------------------------------------- seguimiento (paso 7)
 
     @Transactional
-    public IncidenciaResponse registrarSeguimiento(Integer id, IncidenciaSeguimientoRequest request) {
+    public IncidenciaDto registrarSeguimiento(Integer id, SeguimientoRequest datos) {
         Incidencia incidencia = buscar(id);
-        if (incidencia.estaCerrada()) {
-            throw new ConflictoException("La incidencia ya está cerrada y no se puede modificar");
+        if (Incidencia.CERRADA.equals(incidencia.getEstado())) {
+            throw new SolicitudInvalidaException("La incidencia ya está cerrada.");
         }
-        if (request.estado() == EstadoIncidencia.CERRADA) {
-            throw new SolicitudInvalidaException("Para cerrar la incidencia usa la opción de cierre");
-        }
-        Usuario responsable = incidencia.getResponsable().getIdUsuario().equals(request.responsableId())
-                ? incidencia.getResponsable() : responsableActivo(request.responsableId());
-
-        List<String> cambios = new ArrayList<>();
-        registrarCambio(cambios, "estado", incidencia.getEstado(), request.estado());
-        registrarCambio(cambios, "gravedad", incidencia.getSeveridad(), request.severidad());
-        registrarCambio(cambios, "responsable", incidencia.getResponsable().getUsername(), responsable.getUsername());
-        String descripcion = TextoUtil.normalizar(request.descripcion());
-        String accion = TextoUtil.normalizar(request.accionCorrectiva());
-        if (!Objects.equals(incidencia.getDescripcion(), descripcion)) cambios.add("descripción actualizada");
-        if (!Objects.equals(incidencia.getAccionCorrectiva(), accion)) cambios.add("acción correctiva actualizada");
-
-        incidencia.setEstado(request.estado());
-        incidencia.setSeveridad(request.severidad());
-        incidencia.setResponsable(responsable);
-        incidencia.setDescripcion(descripcion);
-        incidencia.setAccionCorrectiva(accion);
-        incidenciaRepository.save(incidencia);
-
-        if (!cambios.isEmpty()) {
-            auditoriaService.registrar(AccionAuditoria.MODIFICAR, "INCIDENCIA", id, String.join("; ", cambios));
-        }
-        return IncidenciaResponse.from(incidencia);
+        String nota = datos.nota().trim();
+        incidencia.setResponsable(catalogos.buscarResponsable(datos.responsable()));
+        incidencia.setAccionCorrectiva(datos.accionCorrectiva().trim());
+        incidencia.setEstado(Incidencia.EN_SEGUIMIENTO);
+        incidencia.agregarSeguimiento(sesion.usuario(), nota, sesion.ahora());
+        auditoria.registrar("MODIFICAR", "Incidencia", incidencia.getCodigo(), "Registró seguimiento: " + nota);
+        return vistas.incidencia(incidencia, vistas.instantanea());
     }
 
-    // ---------------------------------------------------------------- cierre (pasos 8 y 9)
+    /** No se cierra sin responsable ni acción correctiva (CU17, secuencia alternativa 2). */
+    @Transactional
+    public IncidenciaDto cerrar(Integer id, String nota) {
+        Incidencia incidencia = buscar(id);
+        if (Incidencia.CERRADA.equals(incidencia.getEstado())) {
+            throw new SolicitudInvalidaException("La incidencia ya está cerrada.");
+        }
+        if (incidencia.getResponsable() == null || StringUtils.isBlank(incidencia.getAccionCorrectiva())) {
+            throw new SolicitudInvalidaException("Asigna un responsable y una acción correctiva antes de cerrar.");
+        }
+        String texto = nota.trim();
+        incidencia.setEstado(Incidencia.CERRADA);
+        incidencia.setFechaCierre(sesion.ahora());
+        incidencia.agregarSeguimiento(sesion.usuario(), "Incidencia cerrada: " + texto, incidencia.getFechaCierre());
+        auditoria.registrar("CERRAR", "Incidencia", incidencia.getCodigo(), "Cerró la incidencia: " + texto);
+        return vistas.incidencia(incidencia, vistas.instantanea());
+    }
+
+    // ---------------------------------------------------------------- observaciones (CU18)
+
+    @Transactional(readOnly = true)
+    public List<ObservacionDto> listarObservaciones() {
+        return observacionRepository.findAll(Sort.by(Sort.Direction.DESC, "fecha", "idObservacion")).stream()
+                .map(vistas::observacion)
+                .toList();
+    }
 
     @Transactional
-    public IncidenciaResponse cerrar(Integer id, IncidenciaCierreRequest request) {
-        Incidencia incidencia = buscar(id);
-        if (incidencia.estaCerrada()) {
-            throw new ConflictoException("La incidencia ya está cerrada");
+    public ObservacionDto registrarObservacion(ObservacionRequest datos) {
+        if (!Etiquetas.AMBITO_OBSERVACION.containsKey(datos.ambito())) {
+            throw new SolicitudInvalidaException("El ámbito de la observación no es válido.");
         }
-        String accion = request != null && TextoUtil.normalizar(request.accionCorrectiva()) != null
-                ? TextoUtil.normalizar(request.accionCorrectiva())
-                : incidencia.getAccionCorrectiva();
-        // Alternativa 2 del CU: sin información suficiente no se puede cerrar
-        if (accion == null || accion.length() < ACCION_MINIMA_CIERRE) {
-            throw new SolicitudInvalidaException(
-                    "No se puede cerrar: registra la acción correctiva realizada (mínimo %d caracteres)"
-                            .formatted(ACCION_MINIMA_CIERRE));
-        }
-        incidencia.setAccionCorrectiva(accion);
-        incidencia.setEstado(EstadoIncidencia.CERRADA);
-        incidencia.setFechaCierre(LocalDateTime.now(clock));
-        incidenciaRepository.save(incidencia);
+        Usuario usuario = sesion.usuario();
+        Observacion observacion = new Observacion();
+        observacion.setFecha(sesion.ahora());
+        observacion.setAutor(usuario);
+        observacion.setRol(sesion.nombreRol(usuario, "OBSERVACION_REGISTRAR"));
+        observacion.setAmbito(datos.ambito());
+        observacion.setReferencia(TextoUtil.normalizarCodigo(datos.referencia()));
+        observacion.setTexto(datos.texto().trim());
+        observacionRepository.save(observacion);
 
-        auditoriaService.registrar(AccionAuditoria.CERRAR, "INCIDENCIA", id, "Acción correctiva: " + accion);
-        return IncidenciaResponse.from(incidencia);
+        String ambito = Etiquetas.de(Etiquetas.AMBITO_OBSERVACION, datos.ambito());
+        auditoria.registrar("REGISTRAR", "Observación",
+                StringUtils.defaultIfBlank(observacion.getReferencia(), ambito),
+                "Registró una observación de " + ambito.toLowerCase());
+        return vistas.observacion(observacion);
     }
-
-    // ---------------------------------------------------------------- apoyo
 
     private Incidencia buscar(Integer id) {
-        return incidenciaRepository.findWithDetalleByIdIncidencia(id)
-                .orElseThrow(() -> new RecursoNoEncontradoException("No existe la incidencia " + id));
-    }
-
-    private Area_Generadora areaActiva(Integer id) {
-        Area_Generadora area = areaRepository.findById(id)
-                .orElseThrow(() -> new SolicitudInvalidaException("El área seleccionada no existe"));
-        if (!"ACTIVA".equals(area.getEstado())) {
-            throw new SolicitudInvalidaException("El área seleccionada está inactiva");
-        }
-        return area;
-    }
-
-    private Usuario responsableActivo(Integer id) {
-        Usuario usuario = usuarioRepository.findById(id)
-                .orElseThrow(() -> new SolicitudInvalidaException("El responsable seleccionado no existe"));
-        if (!usuario.isActivo()) {
-            throw new SolicitudInvalidaException("El responsable seleccionado está desactivado");
-        }
-        return usuario;
-    }
-
-    // Se tolera un pequeño adelanto del reloj del cliente
-    private void validarFecha(LocalDateTime fecha) {
-        if (fecha.isAfter(LocalDateTime.now(clock).plusMinutes(5))) {
-            throw new SolicitudInvalidaException("La fecha de la incidencia no puede ser futura");
-        }
-    }
-
-    private static void registrarCambio(List<String> cambios, String campo, Object antes, Object despues) {
-        if (!Objects.equals(antes, despues)) {
-            cambios.add("%s: %s → %s".formatted(campo, antes, despues));
-        }
+        return incidenciaRepository.findById(id)
+                .orElseThrow(() -> new RecursoNoEncontradoException("Incidencia no encontrada"));
     }
 }

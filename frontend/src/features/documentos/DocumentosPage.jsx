@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
+import { toast } from "sonner"
 import { Check, FileText, Paperclip, X } from "lucide-react"
 import { ConfirmAction } from "@/components/shared/ConfirmAction"
 import { EmptyRow } from "@/components/shared/EmptyState"
@@ -24,12 +25,14 @@ import {
 import { useAuth } from "@/features/auth/AuthContext"
 import { useActor } from "@/hooks/useActor"
 import { useMockMutation } from "@/hooks/useMockMutation"
+import { getErrorMessage } from "@/lib/api"
 import { ESTADO_DOCUMENTO, TIPO_DOCUMENTO, opciones } from "@/lib/estados"
 import { TODOS, pasaFiltro } from "@/lib/filtros"
 import { coincide, fechaHora } from "@/lib/formato"
 import { AdjuntarDocumentoDialog } from "./AdjuntarDocumentoDialog"
 import {
   PERMISOS_REVISION,
+  descargarDocumento,
   listarDocumentos,
   rechazarDocumento,
   referenciasDisponibles,
@@ -164,7 +167,24 @@ export default function DocumentosPage() {
                   <div className="flex items-start gap-2">
                     <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                     <div className="min-w-0">
-                      <div className="max-w-64 truncate font-medium">{documento.nombreArchivo}</div>
+                      {documento.tieneArchivo ? (
+                        <button
+                          type="button"
+                          title="Descargar archivo"
+                          className="block max-w-64 cursor-pointer truncate text-left font-medium text-primary underline-offset-4 hover:underline"
+                          onClick={() =>
+                            descargarDocumento(documento).catch((error) =>
+                              toast.error(getErrorMessage(error, "No se pudo descargar el archivo."))
+                            )
+                          }
+                        >
+                          {documento.nombreArchivo}
+                        </button>
+                      ) : (
+                        <div className="max-w-64 truncate font-medium" title="Solo se registró la referencia del documento">
+                          {documento.nombreArchivo}
+                        </div>
+                      )}
                       <div className="max-w-64 truncate text-xs text-muted-foreground">{documento.descripcion}</div>
                     </div>
                   </div>

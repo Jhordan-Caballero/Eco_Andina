@@ -30,7 +30,7 @@ const crearEsquema = ({ contenedores, residuos }) =>
         .refine((valor) => new Date(valor) <= new Date(), "La fecha no puede ser futura"),
       condicionEnvase: z.string().min(1, "Indica la condición del envase"),
       segregacionCorrecta: z.boolean(),
-      evidencia: z.string().optional(),
+      evidencia: z.any().optional(),
       observaciones: z.string().max(255, "Máximo 255 caracteres").optional(),
     })
     .superRefine((valores, ctx) => {

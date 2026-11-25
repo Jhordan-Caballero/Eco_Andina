@@ -119,7 +119,7 @@ export function SalidaDialog({ orden, onClose }) {
       tipoDocumento: z.string().min(1, "Selecciona el documento de traslado"),
       numeroDocumento: z.string().trim().min(4, "Ingresa el número del documento"),
       fecha: fechaPasada,
-      archivo: z.string().optional(),
+      archivo: z.any().optional(),
       observaciones: z.string().max(255, "Máximo 255 caracteres").optional(),
     })
     .refine((valores) => !orden.peligroso || valores.tipoDocumento === "MANIFIESTO", {
@@ -185,8 +185,8 @@ export function RecepcionDialog({ orden, onClose }) {
       conforme: z.boolean(),
       tipoDestino: z.string().min(1, "Selecciona el destino"),
       tratamiento: z.string().trim().min(3, "Describe el tratamiento o disposición"),
-      acta: z.string().optional(),
-      certificado: z.string().optional(),
+      acta: z.any().optional(),
+      certificado: z.any().optional(),
       observaciones: z.string().max(255, "Máximo 255 caracteres").optional(),
     })
     .superRefine((valores, ctx) => {

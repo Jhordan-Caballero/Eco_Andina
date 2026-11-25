@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query"
-import { Info } from "lucide-react"
 import { AlertasAlmacenamiento } from "./AlertasAlmacenamiento"
 import { fetchResumen } from "./dashboardApi"
 import { useActor } from "@/hooks/useActor"
@@ -47,11 +46,6 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <p className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Info className="size-3.5 shrink-0" />
-        Datos de demostración: los módulos trabajan con datos simulados en el navegador y se reinician al recargar la página.
-      </p>
-
       <section
         aria-label="Indicadores"
         className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"

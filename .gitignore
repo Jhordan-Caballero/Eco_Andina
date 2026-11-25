@@ -35,3 +35,7 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Archivos adjuntos subidos en desarrollo ###
+uploads/
+logs/

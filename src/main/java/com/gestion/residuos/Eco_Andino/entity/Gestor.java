@@ -1,26 +1,30 @@
 package com.gestion.residuos.Eco_Andino.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.time.LocalDate;
 
-@Data
 @Entity
 @Table(name = "gestor")
+@Getter
+@Setter
 public class Gestor {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id_gestor")
     private Integer idGestor;
 
-    @Column(nullable = false, length = 100)
+    @Column(nullable = false, length = 120)
     private String empresa;
 
-    @Column(length = 50)
+    @Column(nullable = false, unique = true, length = 60)
     private String autorizacion;
 
-    @Column(length = 100)
+    @Column(name = "proceso_destino", length = 150)
     private String procesoDestino;
 
+    @Column(nullable = false)
     private LocalDate vigencia;
 }

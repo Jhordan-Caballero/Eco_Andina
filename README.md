@@ -75,7 +75,10 @@ Crea una base PostgreSQL local llamada `gestion_residuos` y define tus credencia
 cp .env.example .env
 ```
 
-Las tablas se crean solas al iniciar el backend (`ddl-auto=update`).
+Las tablas se crean solas al iniciar el backend (`ddl-auto=update`) y, si la base está vacía, se cargan datos
+de demostración (residuos, áreas, contenedores, generaciones, órdenes, incidencias, documentos y auditoría)
+con fechas relativas al día de inicio. Si vienes de una versión anterior del modelo, borra y vuelve a crear la
+base `gestion_residuos` para que se genere con las tablas nuevas.
 
 ### 2. Backend
 
@@ -149,6 +152,43 @@ completa está en [`docs/roles-y-permisos.md`](docs/roles-y-permisos.md).
 | `mvaldivia` | Gestor autorizado |
 | `psalas` | Auditor / Gerencia |
 | `jperez` | Generador (**inactivo**, sirve para probar la denegación de acceso) |
+
+## API REST
+
+Todas las rutas (salvo el login) requieren `Authorization: Bearer <token>` y el permiso indicado en
+[`docs/roles-y-permisos.md`](docs/roles-y-permisos.md). Los errores llegan como `{"message": "..."}`.
+Las rutas marcadas con *multipart* reciben `multipart/form-data`: una parte `datos` (JSON) y los archivos.
+
+| Caso de uso | Endpoints |
+|---|---|
+| CU01 Autenticar | `POST /api/auth/login`, `GET /api/auth/me` |
+| CU02 Usuarios y roles | `GET/POST /api/usuarios`, `PUT /api/usuarios/{id}`, `PATCH /api/usuarios/{id}/estado`, `GET /api/roles`, `PUT /api/roles/permisos`, `GET /api/permisos` |
+| CU03 Residuos | `GET/POST /api/residuos`, `PUT /api/residuos/{id}` |
+| CU04 Áreas | `GET/POST /api/areas`, `PUT /api/areas/{id}`, `PATCH /api/areas/{id}/estado`, `GET /api/areas/responsables` |
+| CU05 Contenedores | `GET/POST /api/contenedores`, `PUT /api/contenedores/{id}` |
+| CU06 Transportistas | `GET/POST /api/transportistas`, `PUT /api/transportistas/{id}`, `POST /api/transportistas/{id}/vehiculos`, `PUT /api/transportistas/{id}/vehiculos/{idVehiculo}` |
+| CU07 Gestores | `GET/POST /api/gestores`, `PUT /api/gestores/{id}` |
+| CU08 Generación | `GET /api/generaciones`, `GET /api/generaciones/opciones`, `GET /api/generaciones/{id}`, `POST /api/generaciones` (*multipart*: `datos`, `evidencia`), `PUT /api/generaciones/{id}/correccion` (*multipart*) |
+| CU09 Validación | `PATCH /api/generaciones/{id}/validar`, `PATCH /api/generaciones/{id}/observar` |
+| CU10 Movimientos | `POST /api/movimientos` (traslado o pesaje) |
+| CU11 Almacenamiento | `GET /api/almacenamiento`, `GET /api/almacenamiento/{idContenedor}`, `GET /api/movimientos` |
+| CU12 Programar recolección | `GET /api/recolecciones/opciones`, `POST /api/recolecciones`, `PATCH /api/recolecciones/{id}/aprobar`, `PATCH /api/recolecciones/{id}/cerrar` |
+| CU13 Consultar órdenes | `GET /api/recolecciones`, `GET /api/recolecciones/{id}` |
+| CU14 Salida y traslado | `POST /api/recolecciones/{id}/salida` (*multipart*: `datos`, `archivo`) |
+| CU15 Recepción y destino | `POST /api/recolecciones/{id}/recepcion` (*multipart*: `datos`, `acta`, `certificado`) |
+| CU16 Documentos | `GET/POST /api/documentos` (*multipart*: `datos`, `archivo`), `GET /api/documentos/referencias`, `PATCH /api/documentos/{id}/validar`, `PATCH /api/documentos/{id}/rechazar`, `GET /api/documentos/{id}/archivo` |
+| CU17 Incidencias | `GET /api/incidencias`, `GET /api/incidencias/opciones`, `POST /api/incidencias` (*multipart*), `POST /api/incidencias/{id}/seguimiento`, `PATCH /api/incidencias/{id}/cerrar` |
+| CU18 Observaciones | `GET/POST /api/observaciones` |
+| CU19–CU20 Reportes | `GET /api/reportes?periodo=30\|90\|TODO`, `POST /api/reportes/exportar?periodo=...` |
+| CU21–CU22 Auditoría | `GET /api/auditoria`, `GET/PUT /api/auditoria/configuracion` |
+| Panel general | `GET /api/dashboard` |
+
+Reglas de negocio que aplica el backend (no solo el frontend): el responsable de cada registro sale del token;
+un contenedor no admite otro residuo ni más de su capacidad; los residuos peligrosos exigen evidencia y
+manifiesto; una orden no se cierra sin transportista, cantidad recibida, destino, documento de traslado y
+certificado (RNF003); toda validación, modificación y cierre queda en la auditoría (RNF006). Los archivos se
+guardan en `UPLOADS_DIR` (por defecto `uploads/`): solo PDF, JPG, PNG o WEBP de hasta 10 MB, comprobando el
+contenido real del archivo. Tras 5 intentos fallidos de inicio de sesión el usuario se bloquea 15 minutos.
 
 ## Equipo
 

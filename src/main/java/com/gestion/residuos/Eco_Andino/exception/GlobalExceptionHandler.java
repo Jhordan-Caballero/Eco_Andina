@@ -1,6 +1,7 @@
 package com.gestion.residuos.Eco_Andino.exception;
 
 import com.gestion.residuos.Eco_Andino.dto.ErrorResponse;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -14,16 +15,17 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
+import java.io.UncheckedIOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
+/** Convierte las excepciones en respuestas JSON {"message": ...} que el frontend muestra al usuario. */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     // Cubre también al usuario inexistente: DaoAuthenticationProvider lo convierte en BadCredentialsException
     @ExceptionHandler(BadCredentialsException.class)
@@ -36,6 +38,12 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.FORBIDDEN)
     public ErrorResponse usuarioDesactivado() {
         return new ErrorResponse("El usuario está desactivado. Contacta al administrador");
+    }
+
+    @ExceptionHandler(DemasiadosIntentosException.class)
+    @ResponseStatus(HttpStatus.TOO_MANY_REQUESTS)
+    public ErrorResponse demasiadosIntentos() {
+        return new ErrorResponse("Demasiados intentos fallidos. Espera unos minutos antes de volver a intentarlo");
     }
 
     // Token válido de un usuario que ya no existe (ej. eliminado después de iniciar sesión)
@@ -51,7 +59,9 @@ public class GlobalExceptionHandler {
         Map<String, String> errors = new LinkedHashMap<>();
         ex.getBindingResult().getFieldErrors()
                 .forEach(error -> errors.putIfAbsent(error.getField(), error.getDefaultMessage()));
-        return new ErrorResponse("Datos inválidos", errors);
+        // El primer error como mensaje principal: es lo que el frontend muestra en la notificación
+        String mensaje = errors.isEmpty() ? "Datos inválidos" : errors.values().iterator().next();
+        return new ErrorResponse(mensaje, errors);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
@@ -59,17 +69,22 @@ public class GlobalExceptionHandler {
     public ErrorResponse cuerpoIlegible() {
         return new ErrorResponse("El cuerpo de la petición está vacío o no es un JSON válido");
     }
-    @ExceptionHandler(IllegalArgumentException.class)
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ErrorResponse argumentoInvalido(IllegalArgumentException ex) {
-        return new ErrorResponse(ex.getMessage());
+    public ErrorResponse parteFaltante(MissingServletRequestPartException ex) {
+        return new ErrorResponse("Falta la parte '" + ex.getRequestPartName() + "' de la petición");
     }
 
-    // ---- Casos de uso 17 a 22 ----
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    @ResponseStatus(HttpStatus.PAYLOAD_TOO_LARGE)
+    public ErrorResponse archivoGrande() {
+        return new ErrorResponse("El archivo supera el tamaño máximo permitido (10 MB)");
+    }
 
-    @ExceptionHandler(SolicitudInvalidaException.class)
+    @ExceptionHandler({SolicitudInvalidaException.class, IllegalArgumentException.class})
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ErrorResponse solicitudInvalida(SolicitudInvalidaException ex) {
+    public ErrorResponse solicitudInvalida(RuntimeException ex) {
         return new ErrorResponse(ex.getMessage());
     }
 
@@ -88,7 +103,8 @@ public class GlobalExceptionHandler {
     // Respaldo de las restricciones de la BD (ej. dos peticiones simultáneas con el mismo código)
     @ExceptionHandler(DataIntegrityViolationException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
-    public ErrorResponse integridadDatos() {
+    public ErrorResponse integridadDatos(DataIntegrityViolationException ex) {
+        log.warn("Violación de integridad: {}", ex.getMostSpecificCause().getMessage());
         return new ErrorResponse("El registro entra en conflicto con datos existentes");
     }
 
@@ -106,12 +122,11 @@ public class GlobalExceptionHandler {
         return new ErrorResponse("No tienes permisos para realizar esta operación");
     }
 
-    @ExceptionHandler(ExportacionException.class)
+    @ExceptionHandler(UncheckedIOException.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public ErrorResponse errorExportacion(ExportacionException ex) {
+    public ErrorResponse errorArchivo(UncheckedIOException ex) {
         // La causa técnica queda en el log; al cliente solo el mensaje
-        LoggerFactory.getLogger(GlobalExceptionHandler.class).error("Falló la exportación", ex);
+        log.error("Error de entrada/salida", ex);
         return new ErrorResponse(ex.getMessage());
     }
-
 }

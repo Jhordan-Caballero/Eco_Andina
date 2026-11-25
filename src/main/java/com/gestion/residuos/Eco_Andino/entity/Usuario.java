@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -39,6 +40,9 @@ public class Usuario {
     @Column(nullable = false, length = 15)
     private String estado = ESTADO_ACTIVO;
 
+    @Column(name = "ultimo_acceso")
+    private LocalDateTime ultimoAcceso;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "usuario_rol",
             joinColumns = @JoinColumn(name = "id_usuario"),
@@ -47,5 +51,9 @@ public class Usuario {
 
     public boolean isActivo() {
         return ESTADO_ACTIVO.equals(estado);
+    }
+
+    public String getNombreCompleto() {
+        return nombres + " " + apellidos;
     }
 }
