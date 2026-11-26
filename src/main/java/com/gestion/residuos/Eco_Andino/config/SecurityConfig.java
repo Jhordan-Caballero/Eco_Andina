@@ -50,6 +50,10 @@ public class SecurityConfig {
                         .requestMatchers(LOGIN).permitAll()
                         // Sin esto un error en un endpoint público (ej. 415 en el login) se enmascara como 401 al ir a /error
                         .requestMatchers("/error").permitAll()
+                        // Monitoreo: el estado general y la versión son públicos (los usa Docker para saber si
+                        // el backend está vivo); los detalles, métricas y niveles de log solo el administrador
+                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
+                        .requestMatchers("/actuator/**").hasRole("ADMINISTRADOR")
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         // Un token vencido que el cliente reenvíe por costumbre no debe impedir iniciar sesión

@@ -20,7 +20,10 @@ import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Guarda en disco los archivos adjuntos (CU16) con medidas básicas de seguridad:
@@ -88,6 +91,22 @@ public class ArchivoService {
             throw new RecursoNoEncontradoException("El archivo ya no está disponible en el servidor.");
         }
         return new FileSystemResource(ruta);
+    }
+
+    /** Carpeta donde se guardan los adjuntos (para el monitoreo y el mantenimiento). */
+    public Path directorio() {
+        return directorio;
+    }
+
+    /** Nombres de los archivos que hay hoy en la carpeta de adjuntos. */
+    public Set<String> archivosEnDisco() {
+        try (Stream<Path> rutas = Files.list(directorio)) {
+            return rutas.filter(Files::isRegularFile)
+                    .map(ruta -> ruta.getFileName().toString())
+                    .collect(Collectors.toSet());
+        } catch (IOException e) {
+            throw new UncheckedIOException("No se pudo leer el directorio de archivos " + directorio, e);
+        }
     }
 
     /** Compara los primeros bytes ("magic numbers") con los del formato esperado. */

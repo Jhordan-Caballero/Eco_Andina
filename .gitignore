@@ -39,3 +39,6 @@ build/
 ### Archivos adjuntos subidos en desarrollo ###
 uploads/
 logs/
+
+### Backups locales (scripts/backup.ps1, scripts/backup.sh) ###
+backups/

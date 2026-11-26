@@ -6,4 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface GeneracionRepository extends JpaRepository<Generacion, Integer> {
 
+    long countByEstadoValidacion(String estadoValidacion);
 }

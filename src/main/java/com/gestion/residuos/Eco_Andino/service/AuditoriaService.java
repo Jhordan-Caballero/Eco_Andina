@@ -99,15 +99,28 @@ public class AuditoriaService {
         return aDto(actual);
     }
 
-    /** Elimina los registros de auditoría más antiguos que la retención configurada. */
+    /**
+     * Elimina los registros de auditoría más antiguos que la retención configurada en CU22.
+     * La ejecuta cada noche la tarea programada de mantenimiento; también puede lanzarla el administrador.
+     */
     @Transactional
     public int depurar() {
-        LocalDateTime limite = sesion.ahora().minusDays(obtenerConfiguracion().getRetencionDias());
-        List<Auditoria> antiguos = auditoriaRepository.findAll().stream()
-                .filter(a -> a.getFecha().isBefore(limite))
-                .toList();
-        auditoriaRepository.deleteAll(antiguos);
-        return antiguos.size();
+        int retencion = obtenerConfiguracion().getRetencionDias();
+        LocalDateTime limite = sesion.ahora().minusDays(retencion);
+        int eliminados = auditoriaRepository.eliminarAnterioresA(limite);
+        log.info("Depuración de auditoría: {} registros anteriores a {} eliminados (retención de {} días)",
+                eliminados, limite.toLocalDate(), retencion);
+        return eliminados;
+    }
+
+    /** Depuración lanzada a mano por el administrador: queda registrada en la propia auditoría. */
+    @Transactional
+    public int depurarManual() {
+        int eliminados = depurar();
+        registrar("ELIMINAR", "Auditoría", "Depuración",
+                "Depuró " + eliminados + " registros según la retención de " + obtenerConfiguracion().getRetencionDias()
+                        + " días");
+        return eliminados;
     }
 
     private boolean categoriaActiva(String accion) {

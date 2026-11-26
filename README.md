@@ -57,7 +57,8 @@ simplificación) y [roles y permisos](docs/roles-y-permisos.md).
 .
 ├── src/                # Backend Spring Boot (paquete com.gestion.residuos.Eco_Andino)
 ├── frontend/           # Frontend React
-├── docs/               # Diagrama de clases y modelo entidad-relación
+├── docs/               # Diagramas, modelo entidad-relación y planes de monitoreo y mantenimiento
+├── scripts/            # Backup, restauración y chequeo de salud (PowerShell y Bash)
 └── pom.xml
 ```
 
@@ -182,6 +183,7 @@ Las rutas marcadas con *multipart* reciben `multipart/form-data`: una parte `dat
 | CU19–CU20 Reportes | `GET /api/reportes?periodo=30\|90\|TODO`, `POST /api/reportes/exportar?periodo=...` |
 | CU21–CU22 Auditoría | `GET /api/auditoria`, `GET/PUT /api/auditoria/configuracion` |
 | Panel general | `GET /api/dashboard` |
+| Mantenimiento | `POST /api/mantenimiento/depuracion-auditoria`, `GET /api/mantenimiento/archivos`, `GET /api/mantenimiento/vigencias` |
 
 Reglas de negocio que aplica el backend (no solo el frontend): el responsable de cada registro sale del token;
 un contenedor no admite otro residuo ni más de su capacidad; los residuos peligrosos exigen evidencia y
@@ -189,6 +191,38 @@ manifiesto; una orden no se cierra sin transportista, cantidad recibida, destino
 certificado (RNF003); toda validación, modificación y cierre queda en la auditoría (RNF006). Los archivos se
 guardan en `UPLOADS_DIR` (por defecto `uploads/`): solo PDF, JPG, PNG o WEBP de hasta 10 MB, comprobando el
 contenido real del archivo. Tras 5 intentos fallidos de inicio de sesión el usuario se bloquea 15 minutos.
+
+## Pruebas
+
+Pruebas unitarias con JUnit 5 y Mockito en `src/test/java` (no necesitan base de datos, salvo
+`EcoAndinoApplicationTests`, que levanta la aplicación completa y requiere PostgreSQL encendido):
+
+| Prueba | Qué comprueba |
+|---|---|
+| `RecoleccionServiceTest` | Cierre de orden (CU14): solo con los 5 requisitos de RNF003 y en estado RECIBIDA |
+| `VistaServiceTest` | Requisitos de cierre, vigencias (CU15) y ocupación de contenedores (CU10) |
+| `ArchivoServiceTest` | Adjuntos (CU16): tipo real del archivo, tamaño máximo y path traversal |
+| `LoginAttemptServiceTest` | Bloqueo tras 5 intentos fallidos de inicio de sesión |
+| `AuditoriaServiceTest` | Depuración de auditoría según la retención (CU22) |
+| `MantenimientoServiceTest` | Verificación de adjuntos y revisión de vigencias |
+| `CodigosTest` | Códigos GEN, MOV, OR e INC |
+
+```bash
+./mvnw test                                  # todas
+./mvnw test -Dtest='*ServiceTest,CodigosTest' # solo las unitarias (sin base de datos)
+```
+
+## Monitoreo y mantenimiento
+
+- **Monitoreo** ([plan](docs/plan-monitoreo.md)): logs con rotación en `logs/` (general, alertas y
+  peticiones con su tiempo de respuesta); Spring Boot Actuator en `/actuator/health` (BD, disco y carpeta de
+  adjuntos) e `/actuator/info`, públicos, y `/actuator/metrics`, `/actuator/loggers` y
+  `/actuator/scheduledtasks`, solo para el administrador; métricas propias `ecoandina.*`; healthcheck de
+  Docker y `scripts/salud.ps1` o `scripts/salud.sh` para la salud del sistema operativo.
+- **Mantenimiento** ([plan](docs/plan-mantenimiento.md)): tareas programadas (depuración de auditoría a
+  diario, verificación de adjuntos semanal y aviso de autorizaciones por vencer); backups con
+  `scripts/backup.ps1` (Windows, programable con `scripts/programar-backup.ps1`) o `scripts/backup.sh` (cron
+  en el servidor), y restauración con `scripts/restaurar.*`.
 
 ## Equipo
 
