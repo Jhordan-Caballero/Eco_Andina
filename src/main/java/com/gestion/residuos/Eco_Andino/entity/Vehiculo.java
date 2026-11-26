@@ -1,19 +1,24 @@
 package com.gestion.residuos.Eco_Andino.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.math.BigDecimal;
 
-@Data
 @Entity
 @Table(name = "vehiculo")
+@Getter
+@Setter
 public class Vehiculo {
+    public static final String OPERATIVO = "OPERATIVO";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id_vehiculo")
     private Integer idVehiculo;
 
-    @Column(unique = true, nullable = false, length = 15)
+    @Column(nullable = false, unique = true, length = 15)
     private String placa;
 
     @Column(length = 50)
@@ -22,10 +27,11 @@ public class Vehiculo {
     @Column(precision = 10, scale = 2)
     private BigDecimal capacidad;
 
-    @Column(length = 20)
-    private String estado;
+    // OPERATIVO / EN_MANTENIMIENTO / INACTIVO
+    @Column(nullable = false, length = 20)
+    private String estado = OPERATIVO;
 
-    @ManyToOne
-    @JoinColumn(name = "id_transportista")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "id_transportista", nullable = false)
     private Transportista transportista;
 }

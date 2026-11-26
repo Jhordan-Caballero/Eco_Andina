@@ -6,19 +6,44 @@ PostgreSQL del [diagrama de clases](diagrama-clases.md). Los permisos y roles in
 
 ## Estado de implementación
 
-| Tabla | Estado | Entidad JPA |
-|---|---|---|
-| `usuario` | implementado | `Usuario` |
-| `rol` | implementado | `Rol` |
-| `permiso` | implementado | `Permiso` |
-| `usuario_rol` | implementado | (@ManyToMany de Usuario) |
-| `rol_permiso` | implementado | (@ManyToMany de Rol) |
-| `residuo` | implementado | `Residuo` |
-| `area`, `contenedor`, `generacion`, `movimiento`, `transportista`, `gestor`, `recoleccion`, `detalle_recoleccion`, `incidencia`, `documento`, `auditoria` | pendiente | — |
+Todas las tablas están implementadas como entidades JPA (paquete `entity`) y se crean solas al iniciar el
+backend (`spring.jpa.hibernate.ddl-auto=update`). El esquema real es el que definen esas clases; el
+diagrama y el diccionario de abajo son el diseño original, con los cambios que se listan aquí.
 
-Las tablas se crean desde las entidades JPA (`spring.jpa.hibernate.ddl-auto=update`), así que el esquema
-real es el que definen esas clases. La entidad `Residuo` no define longitudes ni restricciones: hoy todas
-sus columnas son `varchar(255)` y opcionales.
+| Tabla | Entidad JPA | Casos de uso |
+|---|---|---|
+| `usuario`, `rol`, `permiso`, `usuario_rol`, `rol_permiso` | `Usuario`, `Rol`, `Permiso` | CU01, CU02 |
+| `residuo` | `Residuo` | CU03 |
+| `area` | `AreaGeneradora` | CU04 |
+| `contenedor` | `Contenedor` | CU05 |
+| `transportista`, `vehiculo` | `Transportista`, `Vehiculo` | CU06 |
+| `gestor` | `Gestor` | CU07 |
+| `generacion` | `Generacion` | CU08, CU09 |
+| `movimiento` | `Movimiento` | CU10, CU11 |
+| `recoleccion`, `detalle_recoleccion` | `Recoleccion`, `DetalleRecoleccion` | CU12–CU15 |
+| `documento` | `Documento` | CU16 |
+| `incidencia`, `seguimiento_incidencia` | `Incidencia`, `SeguimientoIncidencia` | CU17 |
+| `observacion` | `Observacion` | CU18 |
+| `auditoria`, `configuracion_auditoria` | `Auditoria`, `ConfiguracionAuditoria` | CU21, CU22 (RNF006) |
+
+### Cambios respecto al diseño original
+
+- **`residuo.plazo_maximo_dias`**: días que el residuo puede permanecer en el almacenamiento temporal; con él
+  se calculan las alertas de plazo. `codigo` es único y obligatorio.
+- **`contenedor.stock_inicial` y `fecha_stock`**: lo que ya contenía al empezar a usar el sistema. La
+  ocupación no se guarda: se calcula (stock inicial + generaciones aún en planta + traslados y pesajes).
+- **`vehiculo` es una tabla** (placa, tipo, capacidad, estado) en vez de texto, como pide RF009.
+- **`generacion`** guarda además `codigo` (GEN-0101), `segregacion_correcta`, quién y cuándo validó
+  (`id_validado_por`, `fecha_validacion`) y el motivo de la observación (`observacion_validacion`).
+- **`movimiento`** guarda `tipo` (INGRESO, SALIDA, TRASLADO, PESAJE), `referencia` al registro que lo originó,
+  `ajuste` (pesajes) y `afecta_stock`.
+- **`recoleccion`** guarda la aprobación, la salida, la recepción, el destino y el cierre con su responsable
+  y fecha. `detalle_recoleccion` apunta a la `generacion` (cada generación va en una sola orden).
+- **`documento.referencia`**: el código del registro (OR-1040, GEN-0112, INC-0003) en vez de tres claves
+  foráneas opcionales. `ruta_archivo` es el nombre aleatorio con el que se guardó el archivo en disco.
+- **`seguimiento_incidencia`**: historial de notas de una incidencia.
+- **`observacion`**: observaciones operativas (CU18).
+- **`auditoria.nombre_usuario`**: conserva el nombre aunque el usuario cambie después.
 
 ## Convenciones
 
@@ -50,16 +75,12 @@ joins y un esquema que se explica solo. Decisiones concretas:
 tener varios roles y un rol varios permisos, así que `usuario_rol` y `rol_permiso` son tablas puente
 reales, no un exceso de normalización.
 
-## Decisiones abiertas
+## Decisiones
 
-- **Vincular usuarios con su organización**: hoy `usuario` no referencia un área, transportista o gestor.
-  Un usuario con rol Transportista o Gestor autorizado ve lo mismo que cualquier otro con ese rol; si debe
-  ver solo lo de su empresa habrá que agregar esa referencia.
-- **Entidades separadas del informe**: `vehiculo`, `recepcion`, `destino` y `evidencia` (ver las
-  decisiones 2, 3 y 5).
-- **Restricciones de `residuo`**: definir longitudes y un `codigo` único, como en el resto de catálogos.
-- **Cómo se llena `auditoria`**: quién escribe los registros (servicio o interceptor) al validar, modificar
-  o cerrar.
+- **Usuarios y su organización**: un usuario no está vinculado a una empresa transportista o gestora. El
+  acceso a las órdenes se controla por rol y permiso (RNF002).
+- **Auditoría**: la escribe cada servicio al validar, modificar o cerrar (`AuditoriaService.registrar`), y
+  la configuración (CU22) decide qué categorías de eventos se guardan.
 
 ## Diagrama
 

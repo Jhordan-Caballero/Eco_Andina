@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
+import { getErrorMessage } from "@/lib/api"
 
 export function useMockMutation(mutationFn, { success, onSuccess } = {}) {
   const queryClient = useQueryClient()
@@ -14,7 +15,7 @@ export function useMockMutation(mutationFn, { success, onSuccess } = {}) {
       onSuccess?.(data, variables)
     },
     onError: (error) => {
-      toast.error(error?.message || "No se pudo completar la operación.")
+      toast.error(getErrorMessage(error, "No se pudo completar la operación."))
     },
   })
 }

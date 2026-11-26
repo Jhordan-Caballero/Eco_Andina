@@ -1,23 +1,71 @@
 <configuration>
-    <!-- Muestra los logs en la consola del IDE -->
+    <!--
+        Logs de EcoAndina (ver docs/plan-monitoreo.md).
+        - ecoandina.log: todo desde INFO. Un archivo por día, comprimido al rotar.
+        - ecoandina-alertas.log: solo WARN y ERROR, para revisar rápido lo que falló.
+        - ecoandina-peticiones.log: una línea por petición a la API (método, ruta, estado, tiempo y usuario).
+        La carpeta se cambia con la variable de entorno LOG_DIR (por defecto "logs").
+    -->
+    <property name="LOG_DIR" value="${LOG_DIR:-logs}" />
+    <property name="PATRON" value="%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n" />
+
+    <!-- Muestra los logs en la consola del IDE / docker logs -->
     <appender name="CONSOLA" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <pattern>${PATRON}</pattern>
         </encoder>
     </appender>
 
-    <!-- Guarda los logs en un archivo físico -->
-    <appender name="ARCHIVO" class="ch.qos.logback.core.FileAppender">
-        <file>logs/ecoandina.log</file>
-        <append>true</append>
+    <!-- Log general: rota cada día (o al llegar a 20 MB) y guarda 30 días, máximo 1 GB en total -->
+    <appender name="ARCHIVO" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/ecoandina.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/historial/ecoandina.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>20MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <pattern>${PATRON}</pattern>
         </encoder>
     </appender>
+
+    <!-- Solo advertencias y errores: es lo primero que se revisa en el monitoreo diario -->
+    <appender name="ALERTAS" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/ecoandina-alertas.log</file>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/historial/ecoandina-alertas.%d{yyyy-MM-dd}.log.gz</fileNamePattern>
+            <maxHistory>90</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${PATRON}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Registro de peticiones HTTP (rendimiento): lo escribe RegistroPeticionesFilter -->
+    <appender name="PETICIONES" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/ecoandina-peticiones.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/historial/ecoandina-peticiones.%d{yyyy-MM-dd}.log.gz</fileNamePattern>
+            <maxHistory>14</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <logger name="com.gestion.residuos.Eco_Andino.monitoreo.RegistroPeticionesFilter" level="INFO" additivity="false">
+        <appender-ref ref="PETICIONES" />
+        <appender-ref ref="ALERTAS" />
+    </logger>
 
     <!-- Nivel mínimo de logs a registrar (INFO) -->
     <root level="INFO">
         <appender-ref ref="CONSOLA" />
         <appender-ref ref="ARCHIVO" />
+        <appender-ref ref="ALERTAS" />
     </root>
 </configuration>

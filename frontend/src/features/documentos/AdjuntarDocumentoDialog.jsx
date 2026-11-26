@@ -11,7 +11,7 @@ import { adjuntarDocumento } from "./documentosApi"
 const esquema = z.object({
   tipo: z.string().min(1, "Selecciona el tipo de documento"),
   referencia: z.string().min(1, "Selecciona el registro relacionado"),
-  nombreArchivo: z.string().min(1, "Selecciona el archivo"),
+  archivo: z.any().refine((valor) => valor instanceof File, "Selecciona el archivo"),
   descripcion: z.string().max(200, "Máximo 200 caracteres").optional(),
 })
 
@@ -19,7 +19,7 @@ export function AdjuntarDocumentoDialog({ referencia, referencias = [], tipoInic
   const actor = useActor()
   const form = useForm({
     resolver: zodResolver(esquema),
-    defaultValues: { tipo: tipoInicial, referencia: referencia ?? "", nombreArchivo: "", descripcion: "" },
+    defaultValues: { tipo: tipoInicial, referencia: referencia ?? "", archivo: null, descripcion: "" },
   })
   const adjuntar = useMockMutation(adjuntarDocumento, {
     success: (documento) => `${documento.nombreArchivo} adjuntado a ${documento.referencia}`,
@@ -47,10 +47,10 @@ export function AdjuntarDocumentoDialog({ referencia, referencias = [], tipoInic
       )}
       <FileField
         control={form.control}
-        name="nombreArchivo"
+        name="archivo"
         label="Archivo"
         accept=".pdf,image/*"
-        description="PDF o imagen. En esta versión de demostración solo se guarda el nombre del archivo."
+        description="PDF, JPG, PNG o WEBP de hasta 10 MB."
       />
       <TextareaField control={form.control} name="descripcion" label="Descripción (opcional)" />
     </FormDialog>

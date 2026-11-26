@@ -1,226 +1,168 @@
 package com.gestion.residuos.Eco_Andino.service;
 
-import com.gestion.residuos.Eco_Andino.entity.AccionAuditoria;
-import com.gestion.residuos.Eco_Andino.exception.ConflictoException;
-import com.gestion.residuos.Eco_Andino.exception.ExportacionException;
-import com.gestion.residuos.Eco_Andino.exception.RecursoNoEncontradoException;
+import com.gestion.residuos.Eco_Andino.dto.GeneracionDtos.GeneracionVista;
+import com.gestion.residuos.Eco_Andino.dto.ReporteDtos.*;
+import com.gestion.residuos.Eco_Andino.entity.AreaGeneradora;
+import com.gestion.residuos.Eco_Andino.entity.Generacion;
+import com.gestion.residuos.Eco_Andino.entity.Incidencia;
+import com.gestion.residuos.Eco_Andino.entity.Recoleccion;
 import com.gestion.residuos.Eco_Andino.exception.SolicitudInvalidaException;
-import com.gestion.residuos.Eco_Andino.security.UsuarioActual;
-import com.gestion.residuos.Eco_Andino.service.reporte.*;
+import com.gestion.residuos.Eco_Andino.repository.AreaGeneradoraRepository;
+import com.gestion.residuos.Eco_Andino.repository.IncidenciaRepository;
+import com.gestion.residuos.Eco_Andino.util.Etiquetas;
+import com.gestion.residuos.Eco_Andino.util.Numeros;
 import com.gestion.residuos.Eco_Andino.util.TextoUtil;
-import org.apache.commons.codec.digest.DigestUtils;
+import lombok.RequiredArgsConstructor;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
-import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.ss.util.CellRangeAddress;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.nio.charset.StandardCharsets;
-import java.time.Clock;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
+import java.io.StringWriter;
+import java.io.UncheckedIOException;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import java.util.function.Predicate;
 
-/**
- * CU19 – Generar reportes e indicadores y CU20 – Exportar reportes.
- * Los reportes son plugins ({@link ReporteGenerador}); aquí se generan, se validan los filtros y se exportan a
- * Excel (Apache POI) o CSV (Commons CSV) con una huella SHA-256 (Commons Codec).
- */
+/** Reportes e indicadores de la gestión de residuos (CU19) y su exportación a CSV (CU20). */
 @Service
+@RequiredArgsConstructor
 public class ReporteService {
-    public static final String TIPO_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    public static final String TIPO_CSV = "text/csv; charset=UTF-8";
+    private static final Map<String, String> PERIODOS = Map.of(
+            "30", "Últimos 30 días", "90", "Últimos 90 días", "TODO", "Todo el registro");
+    private static final DateTimeFormatter FECHA_HORA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+    private static final DateTimeFormatter ARCHIVO = DateTimeFormatter.ofPattern("yyyyMMdd-HHmm");
 
-    private static final DateTimeFormatter FECHA_ARCHIVO = DateTimeFormatter.ofPattern("yyyyMMdd_HHmm");
-    private static final DateTimeFormatter FECHA_HOJA = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private final AreaGeneradoraRepository areaRepository;
+    private final IncidenciaRepository incidenciaRepository;
+    private final VistaService vistas;
+    private final SesionService sesion;
+    private final AuditoriaService auditoria;
 
-    public enum Formato {
-        XLSX("xlsx", TIPO_XLSX), CSV("csv", TIPO_CSV);
-
-        final String extension;
-        final String contentType;
-
-        Formato(String extension, String contentType) {
-            this.extension = extension;
-            this.contentType = contentType;
+    @Transactional(readOnly = true)
+    public Reporte generar(String periodo) {
+        if (!PERIODOS.containsKey(periodo)) {
+            throw new SolicitudInvalidaException("El periodo debe ser 30, 90 o TODO.");
         }
+        LocalDateTime desde = "TODO".equals(periodo) ? null : sesion.ahora().minusDays(Long.parseLong(periodo));
+        Predicate<LocalDateTime> enPeriodo = fecha -> desde == null || (fecha != null && !fecha.isBefore(desde));
+        VistaService.Instantanea foto = vistas.instantanea();
 
-        public static Formato de(String valor) {
-            for (Formato f : values()) {
-                if (f.extension.equalsIgnoreCase(valor)) return f;
+        List<GeneracionVista> todas = foto.generaciones().stream()
+                .sorted(Comparator.comparing(Generacion::getFecha, Comparator.reverseOrder()))
+                .map(g -> vistas.generacion(g, foto))
+                .toList();
+        List<GeneracionVista> generaciones = todas.stream().filter(g -> enPeriodo.test(g.fecha())).toList();
+        List<GeneracionVista> enKg = generaciones.stream().filter(g -> "kg".equals(g.unidad())).toList();
+        long validadas = generaciones.stream().filter(g -> "VALIDADA".equals(g.estadoValidacion())).count();
+        double totalKg = sumar(enKg);
+        double peligrososKg = sumar(enKg.stream()
+                .filter(g -> List.of("PELIGROSO", "ESPECIAL").contains(g.residuo().categoria())).toList());
+
+        List<Recoleccion> ordenes = foto.recolecciones().stream()
+                .filter(o -> enPeriodo.test(o.getFechaSolicitud())).toList();
+        long conRecepcion = ordenes.stream()
+                .filter(o -> List.of(Recoleccion.RECIBIDA, Recoleccion.CERRADA).contains(o.getEstado())).count();
+        long cerradas = ordenes.stream().filter(o -> Recoleccion.CERRADA.equals(o.getEstado())).count();
+
+        List<Incidencia> incidencias = incidenciaRepository.findAll().stream()
+                .filter(i -> enPeriodo.test(i.getFecha())).toList();
+
+        List<Serie> porArea = new ArrayList<>();
+        for (AreaGeneradora area : areaRepository.findAll(Sort.by("codigo"))) {
+            double valor = sumar(enKg.stream().filter(g -> g.idArea().equals(area.getIdArea())).toList());
+            if (valor > 0) {
+                porArea.add(new Serie(area.getCodigo(), area.getNombre(), valor));
             }
-            throw new SolicitudInvalidaException("Formato no soportado. Usa xlsx o csv");
         }
-    }
+        porArea.sort(Comparator.comparingDouble(Serie::valor).reversed());
 
-    public record Archivo(String nombre, String contentType, byte[] datos, String sha256) {
-    }
-
-    // Reportes del informe (RF015) que dependen de módulos de otros casos de uso, todavía sin implementar
-    private static final List<ReporteTipo> PENDIENTES = List.of(
-            pendiente("GENERACION", "Cantidades generadas", "Residuos generados por área, tipo y periodo.", "CU08 (registro de generación)"),
-            pendiente("ALMACENAMIENTO", "Almacenamiento temporal", "Ocupación de contenedores y permanencia de residuos.", "CU10 (almacenamiento y movimientos)"),
-            pendiente("RECOLECCIONES", "Recolecciones", "Órdenes de recolección programadas y ejecutadas.", "CU12 y CU14 (recolección y traslado)"),
-            pendiente("DESTINOS", "Destinos finales", "Cantidades recibidas, tratamiento y disposición final.", "CU15 (recepción y destino)"),
-            pendiente("CUMPLIMIENTO", "Cumplimiento de procedimientos", "Validaciones y plazos cumplidos.", "CU09 (validación de generación)"));
-
-    private static ReporteTipo pendiente(String codigo, String nombre, String descripcion, String depende) {
-        return new ReporteTipo(codigo, nombre, descripcion, false, "Disponible cuando se implemente " + depende,
-                List.of("periodo", "area"));
-    }
-
-    private final Map<String, ReporteGenerador> generadores;
-    private final UsuarioActual usuarioActual;
-    private final AuditoriaService auditoriaService;
-    private final Clock clock;
-
-    public ReporteService(List<ReporteGenerador> generadores, UsuarioActual usuarioActual,
-                          AuditoriaService auditoriaService, Clock clock) {
-        this.generadores = generadores.stream().collect(
-                Collectors.toMap(ReporteGenerador::codigo, Function.identity(), (a, b) -> a, LinkedHashMap::new));
-        this.usuarioActual = usuarioActual;
-        this.auditoriaService = auditoriaService;
-        this.clock = clock;
-    }
-
-    // ---------------------------------------------------------------- CU19
-
-    public List<ReporteTipo> tipos() {
-        List<ReporteTipo> tipos = new ArrayList<>();
-        generadores.values().forEach(g -> tipos.add(
-                new ReporteTipo(g.codigo(), g.nombre(), g.descripcion(), true, null, g.filtros())));
-        tipos.addAll(PENDIENTES);
-        return tipos;
-    }
-
-    public ReporteResultado generar(String codigo, FiltroReporte filtro) {
-        validar(filtro);
-        ReporteGenerador generador = generadores.get(codigo == null ? "" : codigo.toUpperCase(Locale.ROOT));
-        if (generador == null) {
-            boolean pendiente = PENDIENTES.stream().anyMatch(t -> t.codigo().equalsIgnoreCase(codigo));
-            if (pendiente) {
-                throw new ConflictoException("Este reporte aún no está disponible: depende de un módulo en desarrollo");
-            }
-            throw new RecursoNoEncontradoException("No existe el reporte " + TextoUtil.paraLog(codigo));
+        YearMonth actual = YearMonth.from(sesion.hoy());
+        List<Mensual> mensual = new ArrayList<>();
+        for (int i = 5; i >= 0; i--) {
+            YearMonth mes = actual.minusMonths(i);
+            List<GeneracionVista> delMes = todas.stream().filter(g -> YearMonth.from(g.fecha()).equals(mes)).toList();
+            mensual.add(new Mensual(mes.toString(), mes.toString(),
+                    sumar(delMes.stream().filter(g -> "kg".equals(g.unidad())).toList()), delMes.size(), i == 0));
         }
-        return generador.generar(filtro, LocalDateTime.now(clock));
+
+        List<Serie> destinos = new ArrayList<>();
+        Etiquetas.TIPO_DESTINO.forEach((tipo, etiqueta) -> destinos.add(new Serie(tipo, etiqueta,
+                ordenes.stream()
+                        .filter(o -> tipo.equals(o.getTipoDestino()) && o.getCantidadRecibida() != null)
+                        .filter(o -> o.getDetalles().stream().allMatch(d -> "kg".equals(d.getGeneracion().getResiduo().getUnidad())))
+                        .mapToDouble(o -> Numeros.valor(o.getCantidadRecibida()))
+                        .sum())));
+        destinos.sort(Comparator.comparing(Serie::clave));
+
+        List<Serie> incidenciasPorTipo = new ArrayList<>();
+        Etiquetas.TIPO_INCIDENCIA.forEach((tipo, etiqueta) -> incidenciasPorTipo.add(new Serie(tipo, etiqueta,
+                incidencias.stream().filter(i -> tipo.equals(i.getTipo())).count())));
+        incidenciasPorTipo.sort(Comparator.comparingDouble(Serie::valor).reversed());
+
+        Kpis kpis = new Kpis(totalKg, generaciones.size(), Numeros.porcentaje(validadas, generaciones.size()), validadas,
+                Numeros.porcentaje(cerradas, conRecepcion), cerradas, conRecepcion,
+                Numeros.porcentaje(peligrososKg, totalKg), incidencias.size(),
+                incidencias.stream().filter(i -> !Incidencia.CERRADA.equals(i.getEstado())).count());
+        return new Reporte(periodo, kpis, porArea, mensual, destinos, incidenciasPorTipo, generaciones);
     }
 
-    // ---------------------------------------------------------------- CU20
-
-    // Transacción de escritura: el registro de auditoría de la exportación se guarda en la misma
+    /** CU20: exporta los indicadores y el detalle a CSV (separado por punto y coma, abre bien en Excel). */
     @Transactional
-    public Archivo exportar(String codigo, FiltroReporte filtro, Formato formato) {
-        ReporteResultado reporte = generar(codigo, filtro);
-        // Alternativa 1 del CU20
-        if (reporte.filas().isEmpty()) {
-            throw new RecursoNoEncontradoException("No hay datos disponibles para exportar con los filtros seleccionados");
-        }
-        byte[] datos = formato == Formato.XLSX
-                ? generarXlsx(reporte, usuarioActual.username())
-                : generarCsv(reporte);
-        String nombre = TextoUtil.nombreArchivoSeguro("%s_%s.%s".formatted(reporte.codigo().toLowerCase(Locale.ROOT),
-                reporte.generadoEn().format(FECHA_ARCHIVO), formato.extension));
-        Archivo archivo = new Archivo(nombre, formato.contentType, datos, DigestUtils.sha256Hex(datos));
-
-        auditoriaService.registrar(AccionAuditoria.EXPORTAR, "REPORTE", null,
-                "%s en %s, %d filas, sha256=%s".formatted(reporte.codigo(), formato.extension, reporte.filas().size(),
-                        archivo.sha256()));
-        return archivo;
-    }
-
-    // ---------------------------------------------------------------- generación de archivos (visibles para pruebas)
-
-    static void validar(FiltroReporte filtro) {
-        if (filtro.desde() != null && filtro.hasta() != null && filtro.desde().isAfter(filtro.hasta())) {
-            throw new SolicitudInvalidaException("La fecha inicial no puede ser posterior a la final");
-        }
-    }
-
-    static byte[] generarXlsx(ReporteResultado reporte, String usuario) {
-        try (Workbook libro = new XSSFWorkbook(); ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
-            Font negrita = libro.createFont();
-            negrita.setBold(true);
-            CellStyle encabezado = libro.createCellStyle();
-            encabezado.setFont(negrita);
-            encabezado.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
-            encabezado.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-
-            Sheet hoja = libro.createSheet("Reporte");
-            Row cabecera = hoja.createRow(0);
-            for (int i = 0; i < reporte.columnas().size(); i++) {
-                Cell celda = cabecera.createCell(i);
-                celda.setCellValue(reporte.columnas().get(i));
-                celda.setCellStyle(encabezado);
-                // Anchos fijos: autoSizeColumn necesita fuentes del sistema y falla en servidores sin ellas
-                hoja.setColumnWidth(i, 24 * 256);
+    public Exportacion exportar(String periodo) {
+        Reporte reporte = generar(periodo);
+        String etiquetaPeriodo = PERIODOS.get(periodo);
+        LocalDateTime ahora = sesion.ahora();
+        StringWriter salida = new StringWriter();
+        CSVFormat formato = CSVFormat.DEFAULT.builder().setDelimiter(';').setRecordSeparator("\r\n").build();
+        try (CSVPrinter csv = new CSVPrinter(salida, formato)) {
+            csv.printRecord("Reporte de gestión de residuos sólidos · EcoAndina");
+            csv.printRecord("Periodo", etiquetaPeriodo);
+            csv.printRecord("Generado por", sesion.usuario().getNombreCompleto());
+            csv.printRecord("Fecha", ahora.format(FECHA_HORA));
+            csv.println();
+            csv.printRecord("Indicador", "Valor");
+            csv.printRecord("Residuos generados (kg)", decimal(reporte.kpis().totalKg()));
+            csv.printRecord("Registros de generación", reporte.kpis().registros());
+            csv.printRecord("Tasa de validación (%)", reporte.kpis().tasaValidacion());
+            csv.printRecord("Órdenes con trazabilidad completa (%)", reporte.kpis().trazabilidad());
+            csv.printRecord("Residuos peligrosos (% del peso)", reporte.kpis().peligrosos());
+            csv.printRecord("Incidencias registradas", reporte.kpis().incidencias());
+            csv.println();
+            csv.printRecord("Código", "Fecha", "Área", "Residuo", "Categoría", "Cantidad", "Unidad", "Validación",
+                    "Contenedor", "Orden", "Estado de la orden");
+            for (GeneracionVista g : reporte.generaciones()) {
+                csv.printRecord(g.codigo(), g.fecha().format(FECHA_HORA), celda(g.area().nombre()),
+                        celda(g.residuo().nombre()), Etiquetas.de(Etiquetas.CATEGORIA_RESIDUO, g.residuo().categoria()),
+                        decimal(Numeros.valor(g.cantidad())), g.unidad(),
+                        Etiquetas.de(Etiquetas.ESTADO_GENERACION, g.estadoValidacion()), g.contenedor().codigo(),
+                        g.recoleccion() == null ? "" : g.recoleccion().numeroOrden(),
+                        g.recoleccion() == null ? "" : Etiquetas.de(Etiquetas.ESTADO_RECOLECCION, g.recoleccion().estado()));
             }
-            int fila = 1;
-            for (List<String> datos : reporte.filas()) {
-                Row row = hoja.createRow(fila++);
-                for (int i = 0; i < datos.size(); i++) {
-                    row.createCell(i).setCellValue(TextoUtil.neutralizarFormula(datos.get(i)));
-                }
-            }
-            hoja.createFreezePane(0, 1);
-            hoja.setAutoFilter(new CellRangeAddress(0, 0, 0, reporte.columnas().size() - 1));
-
-            Sheet indicadores = libro.createSheet("Indicadores");
-            int n = 0;
-            for (Indicador ind : reporte.indicadores()) {
-                Row row = indicadores.createRow(n++);
-                Cell nombre = row.createCell(0);
-                nombre.setCellValue(ind.nombre());
-                nombre.setCellStyle(encabezado);
-                row.createCell(1).setCellValue(TextoUtil.neutralizarFormula(ind.valor()));
-            }
-            indicadores.setColumnWidth(0, 34 * 256);
-            indicadores.setColumnWidth(1, 40 * 256);
-
-            Sheet info = libro.createSheet("Información");
-            List<String[]> meta = new ArrayList<>(List.of(
-                    new String[]{"Reporte", reporte.nombre()},
-                    new String[]{"Generado", reporte.generadoEn().format(FECHA_HOJA)},
-                    new String[]{"Generado por", TextoUtil.neutralizarFormula(usuario)},
-                    new String[]{"Registros", String.valueOf(reporte.filas().size())}));
-            reporte.filtros().forEach((k, v) -> meta.add(new String[]{"Filtro: " + k, TextoUtil.neutralizarFormula(v)}));
-            for (int i = 0; i < meta.size(); i++) {
-                Row row = info.createRow(i);
-                Cell clave = row.createCell(0);
-                clave.setCellValue(meta.get(i)[0]);
-                clave.setCellStyle(encabezado);
-                row.createCell(1).setCellValue(meta.get(i)[1]);
-            }
-            info.setColumnWidth(0, 22 * 256);
-            info.setColumnWidth(1, 40 * 256);
-
-            libro.write(salida);
-            return salida.toByteArray();
         } catch (IOException e) {
-            throw new ExportacionException("No se pudo generar el archivo", e);
+            throw new UncheckedIOException("No se pudo generar el reporte", e);
         }
+        auditoria.registrar("EXPORTAR", "Reporte", "Indicadores de gestión",
+                "Exportó el reporte (" + etiquetaPeriodo.toLowerCase(Locale.ROOT) + ")");
+        // El BOM hace que Excel reconozca las tildes (UTF-8)
+        return new Exportacion("reporte-residuos-" + ahora.format(ARCHIVO) + ".csv", "﻿" + salida);
     }
 
-    static byte[] generarCsv(ReporteResultado reporte) {
-        CSVFormat formato = CSVFormat.DEFAULT.builder().setHeader(reporte.columnas().toArray(new String[0])).get();
-        try (ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
-            // BOM UTF-8: sin él Excel muestra mal las tildes al abrir el CSV
-            salida.write(new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF});
-            try (CSVPrinter impresor = new CSVPrinter(new OutputStreamWriter(salida, StandardCharsets.UTF_8), formato)) {
-                for (List<String> fila : reporte.filas()) {
-                    impresor.printRecord(fila.stream().map(TextoUtil::neutralizarFormula).toList());
-                }
-            }
-            return salida.toByteArray();
-        } catch (IOException e) {
-            throw new ExportacionException("No se pudo generar el archivo", e);
-        }
+    private static double sumar(List<GeneracionVista> lista) {
+        return Math.round(lista.stream().mapToDouble(g -> Numeros.valor(g.cantidad())).sum() * 100) / 100.0;
+    }
+
+    private static String decimal(double valor) {
+        return Numeros.cantidad(valor, null).replace(" ", "").replace(" ", "");
+    }
+
+    private static String celda(String valor) {
+        return TextoUtil.neutralizarFormula(valor);
     }
 }

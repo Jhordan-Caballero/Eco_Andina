@@ -67,7 +67,7 @@ function ObservarDialog({ generacion, onClose }) {
 const esquemaCorreccion = z.object({
   cantidad: z.coerce.number({ error: "Ingresa la cantidad" }).positive("La cantidad debe ser mayor a 0"),
   condicionEnvase: z.string().min(1, "Indica la condición del envase"),
-  evidencia: z.string().optional(),
+  evidencia: z.any().optional(),
   observaciones: z.string().trim().min(5, "Describe la corrección realizada"),
 })
 

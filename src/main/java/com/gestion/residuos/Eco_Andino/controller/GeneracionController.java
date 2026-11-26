@@ -1,59 +1,73 @@
 package com.gestion.residuos.Eco_Andino.controller;
 
-import com.gestion.residuos.Eco_Andino.dto.GeneracionRequest;
-import com.gestion.residuos.Eco_Andino.entity.Generacion;
+import com.gestion.residuos.Eco_Andino.dto.GeneracionDtos.*;
 import com.gestion.residuos.Eco_Andino.service.GeneracionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
+/**
+ * Generación y segregación (CU08) y validación (CU09). Registrar y corregir reciben multipart/form-data:
+ * la parte "datos" (JSON) y, opcional, la parte "evidencia" (archivo).
+ */
 @RestController
 @RequestMapping("/api/generaciones")
 @RequiredArgsConstructor
 public class GeneracionController {
-
     private final GeneracionService generacionService;
 
-    // CU08: Registrar una generación de residuos
-    @PostMapping
-    @PreAuthorize("hasAuthority('GENERACION_REGISTRAR')")
-    public Generacion registrar(
-            @Valid @RequestBody GeneracionRequest request) {
-        return generacionService.registrar(request);
-    }
-
-    // Consultar todas las generaciones
     @GetMapping
-    @PreAuthorize("hasAnyAuthority('GENERACION_REGISTRAR', 'GENERACION_VALIDAR')")
-    public List<Generacion> listarTodas() {
-        return generacionService.listarTodas();
+    @PreAuthorize("hasAnyAuthority('GENERACION_REGISTRAR', 'GENERACION_VALIDAR', 'ALMACENAMIENTO_CONSULTAR')")
+    public List<GeneracionVista> listar() {
+        return generacionService.listar();
     }
 
-    // CU09: Consultar generaciones pendientes de validación
-    @GetMapping("/pendientes")
-    @PreAuthorize("hasAuthority('GENERACION_VALIDAR')")
-    public List<Generacion> listarPendientes() {
-        return generacionService.listarPendientes();
+    @GetMapping("/opciones")
+    @PreAuthorize("hasAuthority('GENERACION_REGISTRAR')")
+    public OpcionesRegistro opciones() {
+        return generacionService.opciones();
     }
 
-    // CU09: Validar una generación
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('GENERACION_REGISTRAR', 'GENERACION_VALIDAR', 'ALMACENAMIENTO_CONSULTAR')")
+    public GeneracionDetalle detalle(@PathVariable Integer id) {
+        return generacionService.detalle(id);
+    }
+
+    // CU08: registrar generación y segregación con su evidencia
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('GENERACION_REGISTRAR')")
+    public GeneracionVista registrar(@Valid @RequestPart("datos") GeneracionRequest datos,
+                                     @RequestPart(value = "evidencia", required = false) MultipartFile evidencia) {
+        return generacionService.registrar(datos, evidencia);
+    }
+
+    // CU09: validar
     @PatchMapping("/{id}/validar")
     @PreAuthorize("hasAuthority('GENERACION_VALIDAR')")
-    public Generacion validar(@PathVariable Integer id) {
+    public GeneracionVista validar(@PathVariable Integer id) {
         return generacionService.validar(id);
     }
 
-    // CU09: Observar una generación
+    // CU09: observar (validación no aprobada)
     @PatchMapping("/{id}/observar")
     @PreAuthorize("hasAuthority('GENERACION_VALIDAR')")
-    public Generacion observar(
-            @PathVariable Integer id,
-            @RequestBody ObservacionRequest request) {
-        return generacionService.observar(id, request.observaciones());
+    public GeneracionVista observar(@PathVariable Integer id, @Valid @RequestBody ObservarRequest datos) {
+        return generacionService.observar(id, datos.observacion());
     }
 
-    public record ObservacionRequest(String observaciones) {}
+    // Corrección del registro observado por parte del generador
+    @PutMapping(value = "/{id}/correccion", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('GENERACION_REGISTRAR')")
+    public GeneracionVista corregir(@PathVariable Integer id, @Valid @RequestPart("datos") CorreccionRequest datos,
+                                    @RequestPart(value = "evidencia", required = false) MultipartFile evidencia) {
+        return generacionService.corregir(id, datos, evidencia);
+    }
 }

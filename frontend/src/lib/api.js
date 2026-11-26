@@ -39,3 +39,23 @@ export function getErrorMessage(error, fallback = "Ocurrió un error inesperado.
   }
   return fallback
 }
+
+/** Devuelve el cuerpo de la respuesta. */
+export const datos = (respuesta) => respuesta.data
+
+/** Crea (POST) o actualiza (PUT ruta/id) según venga o no el id. */
+export const guardar = (ruta, id, valores) =>
+  (id ? api.put(`${ruta}/${id}`, valores) : api.post(ruta, valores)).then(datos)
+
+/**
+ * Arma un multipart/form-data con la parte "datos" (JSON) y los archivos que vengan.
+ * El backend recibe la parte "datos" con @RequestPart y cada archivo como MultipartFile.
+ */
+export function formulario(valores, archivos = {}) {
+  const form = new FormData()
+  form.append("datos", new Blob([JSON.stringify(valores)], { type: "application/json" }))
+  Object.entries(archivos).forEach(([nombre, archivo]) => {
+    if (archivo instanceof File) form.append(nombre, archivo)
+  })
+  return form
+}

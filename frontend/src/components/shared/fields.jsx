@@ -151,7 +151,7 @@ export function FileField({ control, name, label, description, accept, className
               accept={accept}
               name={field.name}
               onBlur={field.onBlur}
-              onChange={(event) => field.onChange(event.target.files?.[0]?.name ?? "")}
+              onChange={(event) => field.onChange(event.target.files?.[0] ?? null)}
               className="cursor-pointer file:mr-3 file:cursor-pointer"
             />
           </FormControl>

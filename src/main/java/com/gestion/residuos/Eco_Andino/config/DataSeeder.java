@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +23,7 @@ import java.util.Map;
 
 // Siembra permisos, roles y usuarios de prueba. Solo crea lo que falta: nunca modifica lo existente.
 @Component
+@Order(1)
 @ConditionalOnProperty(name = "app.seed.enabled", havingValue = "true", matchIfMissing = true)
 public class DataSeeder implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(DataSeeder.class);
@@ -88,6 +90,21 @@ public class DataSeeder implements ApplicationRunner {
                     "Ver el registro de auditoría de las acciones del sistema"),
             new PermisoSeed("AUDITORIA_GESTIONAR", "Gestionar auditoría",
                     "Administrar los parámetros del registro de auditoría"));
+
+    // Caso de uso del informe del que sale cada permiso (se muestra en la matriz de roles y permisos)
+    private static final Map<String, String> CASO_USO = Map.ofEntries(
+            Map.entry("USUARIO_GESTIONAR", "CU02"), Map.entry("CATALOGO_CONSULTAR", "CU03–CU05"),
+            Map.entry("RESIDUO_GESTIONAR", "CU03"), Map.entry("AREA_GESTIONAR", "CU04"),
+            Map.entry("CONTENEDOR_GESTIONAR", "CU05"), Map.entry("TRANSPORTISTA_GESTIONAR", "CU06"),
+            Map.entry("GESTOR_GESTIONAR", "CU07"), Map.entry("TRANSPORTISTA_GESTOR_CONSULTAR", "CU06–CU07"),
+            Map.entry("GENERACION_REGISTRAR", "CU08"), Map.entry("GENERACION_VALIDAR", "CU09"),
+            Map.entry("ALMACENAMIENTO_GESTIONAR", "CU10"), Map.entry("ALMACENAMIENTO_CONSULTAR", "CU11"),
+            Map.entry("RECOLECCION_PROGRAMAR", "CU12"), Map.entry("RECOLECCION_CONSULTAR", "CU13"),
+            Map.entry("TRASLADO_REGISTRAR", "CU14"), Map.entry("RECEPCION_REGISTRAR", "CU15"),
+            Map.entry("DOCUMENTO_GESTIONAR", "CU16"), Map.entry("INCIDENCIA_GESTIONAR", "CU17"),
+            Map.entry("OBSERVACION_REGISTRAR", "CU18"), Map.entry("REPORTE_GENERAR", "CU19"),
+            Map.entry("REPORTE_EXPORTAR", "CU20"), Map.entry("AUDITORIA_CONSULTAR", "CU21"),
+            Map.entry("AUDITORIA_GESTIONAR", "CU22"));
 
     private static final List<RolSeed> ROLES = List.of(
             new RolSeed("ADMINISTRADOR", "Administrador",
@@ -175,6 +192,7 @@ public class DataSeeder implements ApplicationRunner {
                 permiso.setCodigo(seed.codigo());
                 permiso.setNombre(seed.nombre());
                 permiso.setDescripcion(seed.descripcion());
+                permiso.setCasoUso(CASO_USO.get(seed.codigo()));
                 permiso = permisoRepository.save(permiso);
                 creados++;
             }
